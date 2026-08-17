@@ -601,6 +601,64 @@ app.get("/api/taxonomy", async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Add a new domain
+app.post("/api/taxonomy/domains", requireRole(ADMIN, ARCHITECT), async (req, res, next) => {
+  try {
+    const { domain } = req.body ?? {};
+    if (!domain || !String(domain).trim()) return res.status(400).json({ error: "domain is required" });
+    const { rows } = await pool.query(
+      "INSERT INTO taxonomy_domains (domain, topics) VALUES ($1, $2) RETURNING domain, topics",
+      [String(domain).trim(), JSON.stringify([])],
+    );
+    res.status(201).json({ domain: rows[0].domain, topics: rows[0].topics });
+  } catch (err) {
+    if (err.code === "23505") return res.status(409).json({ error: "Domain already exists" });
+    next(err);
+  }
+});
+
+// Add a topic to an existing domain
+app.post("/api/taxonomy/domains/:domain/topics", requireRole(ADMIN, ARCHITECT), async (req, res, next) => {
+  try {
+    const { topic } = req.body ?? {};
+    if (!topic || !String(topic).trim()) return res.status(400).json({ error: "topic is required" });
+    const { rows } = await pool.query("SELECT topics FROM taxonomy_domains WHERE domain = $1", [req.params.domain]);
+    if (rows.length === 0) return res.status(404).json({ error: "Domain not found" });
+    const topics = rows[0].topics;
+    if (topics.some((t) => t.name === String(topic).trim())) {
+      return res.status(409).json({ error: "Topic already exists in this domain" });
+    }
+    topics.push({ name: String(topic).trim(), concepts: [] });
+    const updated = await pool.query(
+      "UPDATE taxonomy_domains SET topics = $1 WHERE domain = $2 RETURNING domain, topics",
+      [JSON.stringify(topics), req.params.domain],
+    );
+    res.status(201).json({ domain: updated.rows[0].domain, topics: updated.rows[0].topics });
+  } catch (err) { next(err); }
+});
+
+// Add a concept to an existing domain+topic
+app.post("/api/taxonomy/domains/:domain/topics/:topic/concepts", requireRole(ADMIN, ARCHITECT), async (req, res, next) => {
+  try {
+    const { concept } = req.body ?? {};
+    if (!concept || !String(concept).trim()) return res.status(400).json({ error: "concept is required" });
+    const { rows } = await pool.query("SELECT topics FROM taxonomy_domains WHERE domain = $1", [req.params.domain]);
+    if (rows.length === 0) return res.status(404).json({ error: "Domain not found" });
+    const topics = rows[0].topics;
+    const topicObj = topics.find((t) => t.name === req.params.topic);
+    if (!topicObj) return res.status(404).json({ error: "Topic not found" });
+    if (topicObj.concepts.includes(String(concept).trim())) {
+      return res.status(409).json({ error: "Concept already exists in this topic" });
+    }
+    topicObj.concepts.push(String(concept).trim());
+    const updated = await pool.query(
+      "UPDATE taxonomy_domains SET topics = $1 WHERE domain = $2 RETURNING domain, topics",
+      [JSON.stringify(topics), req.params.domain],
+    );
+    res.status(201).json({ domain: updated.rows[0].domain, topics: updated.rows[0].topics });
+  } catch (err) { next(err); }
+});
+
 // --- Similarity results ---
 app.get("/api/similarity", async (_req, res, next) => {
   try {

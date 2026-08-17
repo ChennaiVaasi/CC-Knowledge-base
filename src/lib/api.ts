@@ -106,6 +106,18 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getTaxonomy: () => request<TaxonomyNode[]>("/api/taxonomy"),
+  createDomain: (domain: string) =>
+    request<TaxonomyNode>("/api/taxonomy/domains", { method: "POST", body: JSON.stringify({ domain }) }),
+  createTopic: (domain: string, topic: string) =>
+    request<TaxonomyNode>(
+      `/api/taxonomy/domains/${encodeURIComponent(domain)}/topics`,
+      { method: "POST", body: JSON.stringify({ topic }) },
+    ),
+  createConcept: (domain: string, topic: string, concept: string) =>
+    request<TaxonomyNode>(
+      `/api/taxonomy/domains/${encodeURIComponent(domain)}/topics/${encodeURIComponent(topic)}/concepts`,
+      { method: "POST", body: JSON.stringify({ concept }) },
+    ),
   getSimilarity: () => request<SimilarityCard[]>("/api/similarity"),
   getApproved: () => request<ApprovedCard[]>("/api/approved"),
 };

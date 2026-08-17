@@ -232,6 +232,20 @@ function App() {
   const [builderLearningOutcome, setBuilderLearningOutcome] = useState("");
   const [builderSolves, setBuilderSolves] = useState("");
   const [builderConcept, setBuilderConcept] = useState("");
+  const [builderDomain, setBuilderDomain] = useState("");
+  const [builderTopic, setBuilderTopic] = useState("");
+
+  // Taxonomy form state
+  const [showTaxonomyForm, setShowTaxonomyForm] = useState(false);
+  const [taxDomainMode, setTaxDomainMode] = useState<"existing" | "new">("existing");
+  const [taxDomainSelect, setTaxDomainSelect] = useState("");
+  const [taxDomainNew, setTaxDomainNew] = useState("");
+  const [taxTopicMode, setTaxTopicMode] = useState<"existing" | "new">("existing");
+  const [taxTopicSelect, setTaxTopicSelect] = useState("");
+  const [taxTopicNew, setTaxTopicNew] = useState("");
+  const [taxConceptNew, setTaxConceptNew] = useState("");
+  const [taxFormError, setTaxFormError] = useState<string | null>(null);
+  const [taxFormBusy, setTaxFormBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -313,7 +327,16 @@ function App() {
     setBuilderLearningOutcome(selectedRow.learningOutcome ?? "");
     setBuilderSolves(selectedRow.solves ?? "");
     setBuilderConcept(selectedRow.concept ?? "");
-  }, [selectedRow?.id]);
+    // Infer domain and topic from broadTags or taxonomy lookup
+    const tagDomain = selectedRow.broadTags[0] ?? "";
+    const tagTopic = selectedRow.broadTags[1] ?? "";
+    const domainExists = taxonomy.some((n) => n.domain === tagDomain);
+    const resolvedDomain = domainExists ? tagDomain : (taxonomy[0]?.domain ?? "");
+    setBuilderDomain(resolvedDomain);
+    const domainNode = taxonomy.find((n) => n.domain === resolvedDomain);
+    const topicExists = domainNode?.topics.some((t) => t.name === tagTopic);
+    setBuilderTopic(topicExists ? tagTopic : (domainNode?.topics[0]?.name ?? ""));
+  }, [selectedRow?.id, taxonomy]);
 
   const assignmentRows = useMemo(() => {
     if (selectedAssignmentTab === "All") {
@@ -828,18 +851,42 @@ function App() {
             <div className="form-grid">
               <label>
                 Domain
-                <select defaultValue="Tactics">
-                  <option>Tactics</option>
-                  <option>Calculation</option>
-                  <option>Endgames</option>
+                <select
+                  value={builderDomain}
+                  onChange={(event) => {
+                    const d = event.target.value;
+                    setBuilderDomain(d);
+                    const domainNode = taxonomy.find((n) => n.domain === d);
+                    const firstTopic = domainNode?.topics[0]?.name ?? "";
+                    setBuilderTopic(firstTopic);
+                    setBuilderConcept(domainNode?.topics[0]?.concepts[0] ?? "");
+                  }}
+                >
+                  {taxonomy.map((n) => <option key={n.domain}>{n.domain}</option>)}
+                  {builderDomain && !taxonomy.some((n) => n.domain === builderDomain) ? (
+                    <option>{builderDomain}</option>
+                  ) : null}
                 </select>
               </label>
               <label>
                 Major Topic
-                <select defaultValue="Defender Manipulation">
-                  <option>Defender Manipulation</option>
-                  <option>Pins</option>
-                  <option>Candidate Moves</option>
+                <select
+                  value={builderTopic}
+                  onChange={(event) => {
+                    const t = event.target.value;
+                    setBuilderTopic(t);
+                    const domainNode = taxonomy.find((n) => n.domain === builderDomain);
+                    const topicObj = domainNode?.topics.find((tp) => tp.name === t);
+                    setBuilderConcept(topicObj?.concepts[0] ?? "");
+                  }}
+                >
+                  {(taxonomy.find((n) => n.domain === builderDomain)?.topics ?? []).map((t) => (
+                    <option key={t.name}>{t.name}</option>
+                  ))}
+                  {builderTopic &&
+                    !taxonomy.find((n) => n.domain === builderDomain)?.topics.some((t) => t.name === builderTopic) ? (
+                    <option>{builderTopic}</option>
+                  ) : null}
                 </select>
               </label>
               <label>
@@ -849,14 +896,13 @@ function App() {
                   onChange={(event) => setBuilderConcept(event.target.value)}
                   onBlur={() => updatePosition(selectedRow.id, { concept: builderConcept })}
                 >
-                  {taxonomy.flatMap((node) =>
-                    node.topics.flatMap((topic) =>
-                      topic.concepts.map((c) => <option key={c}>{c}</option>),
-                    ),
-                  )}
-                  {builderConcept && !taxonomy.some((node) =>
-                    node.topics.some((topic) => topic.concepts.includes(builderConcept))
-                  ) ? <option>{builderConcept}</option> : null}
+                  {(taxonomy.find((n) => n.domain === builderDomain)?.topics.find((t) => t.name === builderTopic)?.concepts ?? []).map((c) => (
+                    <option key={c}>{c}</option>
+                  ))}
+                  {builderConcept &&
+                    !taxonomy.find((n) => n.domain === builderDomain)?.topics.find((t) => t.name === builderTopic)?.concepts.includes(builderConcept) ? (
+                    <option>{builderConcept}</option>
+                  ) : null}
                 </select>
               </label>
               <label>
@@ -1119,7 +1165,62 @@ function App() {
     );
   }
 
+  async function handleTaxonomyAdd(event: React.FormEvent) {
+    event.preventDefault();
+    setTaxFormError(null);
+    setTaxFormBusy(true);
+    try {
+      const domainName = taxDomainMode === "new" ? taxDomainNew.trim() : taxDomainSelect;
+      const topicName = taxTopicMode === "new" ? taxTopicNew.trim() : taxTopicSelect;
+      const conceptName = taxConceptNew.trim();
+
+      if (!domainName) { setTaxFormError("Domain is required."); return; }
+      if (!topicName) { setTaxFormError("Topic is required."); return; }
+      if (!conceptName) { setTaxFormError("Concept name is required."); return; }
+
+      let updatedNode: TaxonomyNode;
+
+      if (taxDomainMode === "new") {
+        // Create domain, then topic (with concept)
+        await api.createDomain(domainName);
+        await api.createTopic(domainName, topicName);
+        updatedNode = await api.createConcept(domainName, topicName, conceptName);
+      } else if (taxTopicMode === "new") {
+        // Create topic (under existing domain), then concept
+        await api.createTopic(domainName, topicName);
+        updatedNode = await api.createConcept(domainName, topicName, conceptName);
+      } else {
+        // Add concept to existing domain + topic
+        updatedNode = await api.createConcept(domainName, topicName, conceptName);
+      }
+
+      setTaxonomy((prev) => {
+        const exists = prev.find((n) => n.domain === updatedNode.domain);
+        if (exists) return prev.map((n) => (n.domain === updatedNode.domain ? updatedNode : n));
+        return [...prev, updatedNode];
+      });
+
+      // Reset form
+      setTaxConceptNew("");
+      if (taxDomainMode === "new") { setTaxDomainNew(""); setTaxTopicNew(""); }
+      if (taxTopicMode === "new") { setTaxTopicNew(""); }
+      setShowTaxonomyForm(false);
+    } catch (err) {
+      setTaxFormError(err instanceof Error ? err.message : "Failed to save");
+    } finally {
+      setTaxFormBusy(false);
+    }
+  }
+
   function renderTaxonomyPage() {
+    const isArchitectOrAdmin =
+      currentUser?.role === "Knowledge Architect" || currentUser?.role === "Admin";
+
+    // Derive the resolved domain name for the form
+    const formDomain = taxDomainMode === "new" ? taxDomainNew.trim() : taxDomainSelect;
+    const formDomainNode = taxonomy.find((n) => n.domain === formDomain);
+    const formTopicOptions = formDomainNode?.topics ?? [];
+
     return (
       <section className="page-stack">
         <div className="page-title">
@@ -1128,8 +1229,132 @@ function App() {
             <h2>Domain → Major Topic → Concept hierarchy</h2>
             <p>Architect-owned structure for the canonical instructional vocabulary.</p>
           </div>
-          <button type="button">Add Concept</button>
+          {isArchitectOrAdmin && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowTaxonomyForm((v) => !v);
+                setTaxFormError(null);
+                // Seed defaults when opening
+                if (!showTaxonomyForm) {
+                  setTaxDomainMode("existing");
+                  setTaxDomainSelect(taxonomy[0]?.domain ?? "");
+                  setTaxTopicMode("existing");
+                  setTaxTopicSelect(taxonomy[0]?.topics[0]?.name ?? "");
+                  setTaxConceptNew("");
+                }
+              }}
+            >
+              {showTaxonomyForm ? "Cancel" : "Add Concept"}
+            </button>
+          )}
         </div>
+
+        {showTaxonomyForm && isArchitectOrAdmin && (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <span className="section-kicker">Grow the Taxonomy</span>
+                <h3>Add domain / topic / concept</h3>
+              </div>
+            </div>
+            <form className="form-grid" onSubmit={handleTaxonomyAdd}>
+              {/* Domain row: single select with existing + "New…" sentinel */}
+              <label className="span-2">
+                Domain
+                <select
+                  value={taxDomainMode === "new" ? "__new__" : taxDomainSelect}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setTaxDomainMode("new");
+                      setTaxDomainNew("");
+                      setTaxTopicMode("new");
+                      setTaxTopicNew("");
+                    } else {
+                      setTaxDomainMode("existing");
+                      setTaxDomainSelect(e.target.value);
+                      const node = taxonomy.find((n) => n.domain === e.target.value);
+                      setTaxTopicMode("existing");
+                      setTaxTopicSelect(node?.topics[0]?.name ?? "");
+                    }
+                  }}
+                >
+                  {taxonomy.map((n) => <option key={n.domain} value={n.domain}>{n.domain}</option>)}
+                  <option value="__new__">+ New domain…</option>
+                </select>
+              </label>
+              {taxDomainMode === "new" && (
+                <label className="span-2">
+                  New Domain Name
+                  <input
+                    required
+                    placeholder="e.g. Opening Theory"
+                    value={taxDomainNew}
+                    onChange={(e) => setTaxDomainNew(e.target.value)}
+                  />
+                </label>
+              )}
+
+              {/* Topic row: single select with existing topics + "New…" sentinel */}
+              <label className="span-2">
+                Major Topic
+                <select
+                  value={taxTopicMode === "new" ? "__new__" : taxTopicSelect}
+                  disabled={taxDomainMode === "new"}
+                  onChange={(e) => {
+                    if (e.target.value === "__new__") {
+                      setTaxTopicMode("new");
+                      setTaxTopicNew("");
+                    } else {
+                      setTaxTopicMode("existing");
+                      setTaxTopicSelect(e.target.value);
+                    }
+                  }}
+                >
+                  {formTopicOptions.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
+                  <option value="__new__">+ New topic…</option>
+                </select>
+              </label>
+              {(taxDomainMode === "new" || taxTopicMode === "new") && (
+                <label className="span-2">
+                  New Topic Name
+                  <input
+                    required
+                    placeholder="e.g. Knight Outposts"
+                    value={taxTopicNew}
+                    onChange={(e) => setTaxTopicNew(e.target.value)}
+                  />
+                </label>
+              )}
+
+              {/* Concept always required */}
+              <label className="span-2">
+                Concept Name
+                <input
+                  required
+                  placeholder="e.g. Removing the Defender"
+                  value={taxConceptNew}
+                  onChange={(e) => setTaxConceptNew(e.target.value)}
+                />
+              </label>
+
+              {taxFormError && <p className="login-error span-2">{taxFormError}</p>}
+              <div className="action-row span-2">
+                <button type="submit" disabled={taxFormBusy}>
+                  {taxFormBusy ? "Saving…" : "Save"}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => { setShowTaxonomyForm(false); setTaxFormError(null); }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
         <div className="card-grid taxonomy-grid">
           {taxonomy.map((node) => (
             <article key={node.domain} className="panel taxonomy-card">
