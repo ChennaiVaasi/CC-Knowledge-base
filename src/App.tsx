@@ -219,6 +219,15 @@ function App() {
 
   const [builderNames, setBuilderNames] = useState<string[]>([]);
 
+  // Add User form state
+  const [showAddUser, setShowAddUser] = useState(false);
+  const [addUserName, setAddUserName] = useState("");
+  const [addUserEmail, setAddUserEmail] = useState("");
+  const [addUserRole, setAddUserRole] = useState("Builder");
+  const [addUserPassword, setAddUserPassword] = useState("");
+  const [addUserError, setAddUserError] = useState<string | null>(null);
+  const [addUserBusy, setAddUserBusy] = useState(false);
+
   // Builder Workspace controlled fields
   const [builderLearningOutcome, setBuilderLearningOutcome] = useState("");
   const [builderSolves, setBuilderSolves] = useState("");
@@ -332,6 +341,40 @@ function App() {
       data.status = "Assigned";
     }
     await updatePosition(id, data);
+  }
+
+  async function handleAddUser(event: React.FormEvent) {
+    event.preventDefault();
+    setAddUserBusy(true);
+    setAddUserError(null);
+    try {
+      const created = await api.createUser({
+        name: addUserName.trim(),
+        email: addUserEmail.trim(),
+        role: addUserRole,
+        password: addUserPassword,
+      });
+      setUsers((prev) => [...prev, created]);
+      setShowAddUser(false);
+      setAddUserName("");
+      setAddUserEmail("");
+      setAddUserRole("Builder");
+      setAddUserPassword("");
+    } catch (err) {
+      setAddUserError(err instanceof Error ? err.message : "Failed to add user");
+    } finally {
+      setAddUserBusy(false);
+    }
+  }
+
+  async function handleUpdateUser(email: string, data: { status?: string; role?: string }) {
+    try {
+      const updated = await api.updateUser(email, data);
+      setUsers((prev) => prev.map((u) => (u.email === email ? updated : u)));
+      setActionError(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Update failed");
+    }
   }
 
   async function handleImport() {
@@ -1123,8 +1166,78 @@ function App() {
             <h2>User management</h2>
             <p>Simple MVP administration for roles, status, and invites.</p>
           </div>
-          <button type="button">+ Add User</button>
+          {currentUser?.role === "Admin" && (
+            <button type="button" onClick={() => { setShowAddUser(true); setAddUserError(null); }}>
+              + Add User
+            </button>
+          )}
         </div>
+
+        {currentUser?.role === "Admin" && showAddUser && (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <span className="section-kicker">New Team Member</span>
+                <h3>Add User</h3>
+              </div>
+            </div>
+            <form className="form-grid" onSubmit={handleAddUser}>
+              <label>
+                Full Name
+                <input
+                  required
+                  placeholder="e.g. Arun Sharma"
+                  value={addUserName}
+                  onChange={(e) => setAddUserName(e.target.value)}
+                />
+              </label>
+              <label>
+                Email
+                <input
+                  type="email"
+                  required
+                  placeholder="user@circlechess.com"
+                  value={addUserEmail}
+                  onChange={(e) => setAddUserEmail(e.target.value)}
+                />
+              </label>
+              <label>
+                Role
+                <select value={addUserRole} onChange={(e) => setAddUserRole(e.target.value)}>
+                  <option>Builder</option>
+                  <option>Knowledge Architect</option>
+                  <option>Peer Reviewer</option>
+                  <option>Admin</option>
+                </select>
+              </label>
+              <label>
+                Initial Password
+                <input
+                  type="password"
+                  required
+                  minLength={8}
+                  placeholder="Min 8 characters"
+                  value={addUserPassword}
+                  onChange={(e) => setAddUserPassword(e.target.value)}
+                />
+              </label>
+              {addUserError && <p className="login-error span-2">{addUserError}</p>}
+              <div className="action-row span-2">
+                <button type="submit" disabled={addUserBusy}>
+                  {addUserBusy ? "Adding..." : "Add User"}
+                </button>
+                <button
+                  type="button"
+                  className="ghost-button"
+                  onClick={() => { setShowAddUser(false); setAddUserError(null); }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
         <section className="panel">
           <div className="toolbar">
             <input placeholder="Search users..." />
@@ -1140,6 +1253,7 @@ function App() {
                   <th>Role</th>
                   <th>Status</th>
                   <th>Joined On</th>
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -1147,9 +1261,42 @@ function App() {
                   <tr key={user.email}>
                     <td>{user.name}</td>
                     <td>{user.email}</td>
-                    <td>{user.role}</td>
-                    <td><span className={`pill ${user.status === "Active" ? "success" : "danger"}`}>{user.status}</span></td>
+                    <td>
+                      {currentUser?.role === "Admin" ? (
+                        <select
+                          value={user.role}
+                          onChange={(e) => handleUpdateUser(user.email, { role: e.target.value })}
+                        >
+                          <option>Builder</option>
+                          <option>Knowledge Architect</option>
+                          <option>Peer Reviewer</option>
+                          <option>Admin</option>
+                        </select>
+                      ) : (
+                        user.role
+                      )}
+                    </td>
+                    <td>
+                      <span className={`pill ${user.status === "Active" ? "success" : "danger"}`}>
+                        {user.status}
+                      </span>
+                    </td>
                     <td>{user.joined}</td>
+                    <td>
+                      {currentUser?.role === "Admin" && (
+                        <button
+                          type="button"
+                          className={user.status === "Active" ? "warning-button" : "ghost-button"}
+                          onClick={() =>
+                            handleUpdateUser(user.email, {
+                              status: user.status === "Active" ? "Inactive" : "Active",
+                            })
+                          }
+                        >
+                          {user.status === "Active" ? "Deactivate" : "Activate"}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {USERS.length === 0 && (
@@ -1178,6 +1325,8 @@ function App() {
         </section>
       );
     }
+    if (activePage === "admin") return renderAdminPage();
+
     if (!selectedRow) {
       return (
         <section className="page-stack">
@@ -1204,8 +1353,6 @@ function App() {
         return renderApprovedPage();
       case "taxonomy":
         return renderTaxonomyPage();
-      case "admin":
-        return renderAdminPage();
       default:
         return renderDashboard();
     }

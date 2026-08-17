@@ -98,8 +98,13 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getUsers: () => request<UserRow[]>("/api/users"),
-  createUser: (data: { name: string; email: string; role: string }) =>
+  createUser: (data: { name: string; email: string; role: string; password: string }) =>
     request<UserRow>("/api/users", { method: "POST", body: JSON.stringify(data) }),
+  updateUser: (email: string, data: { status?: string; role?: string }) =>
+    request<UserRow>(`/api/users/${encodeURIComponent(email)}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
   getTaxonomy: () => request<TaxonomyNode[]>("/api/taxonomy"),
   getSimilarity: () => request<SimilarityCard[]>("/api/similarity"),
   getApproved: () => request<ApprovedCard[]>("/api/approved"),

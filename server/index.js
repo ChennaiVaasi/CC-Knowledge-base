@@ -393,8 +393,20 @@ app.get("/api/auth/me", (req, res) => {
   res.json(req.session.user);
 });
 
-// All routes below require an authenticated session.
-app.use("/api", requireAuth);
+// All routes below require an authenticated session, an active account,
+// and use the current database role (not the cached session role) for authorization.
+app.use("/api", requireAuth, async (req, res, next) => {
+  try {
+    const { rows } = await pool.query("SELECT role, status FROM users WHERE email = $1", [req.session.user.email]);
+    if (!rows[0] || rows[0].status !== "Active") {
+      req.session.destroy(() => {});
+      return res.status(403).json({ error: "Account is inactive" });
+    }
+    // Keep session role in sync so downstream requireRole checks use current value.
+    req.session.user = { ...req.session.user, role: rows[0].role };
+    next();
+  } catch (err) { next(err); }
+});
 
 // --- Positions ---
 app.get("/api/positions", async (_req, res, next) => {
@@ -548,6 +560,37 @@ app.post("/api/users", requireRole(ADMIN), async (req, res, next) => {
     if (err.code === "23505") return res.status(409).json({ error: "User already exists" });
     next(err);
   }
+});
+
+app.patch("/api/users/:email", requireRole(ADMIN), async (req, res, next) => {
+  try {
+    const b = req.body ?? {};
+    const VALID_ROLES = ["Admin", "Knowledge Architect", "Builder", "Peer Reviewer"];
+    const sets = [];
+    const values = [];
+    if (b.status !== undefined) {
+      if (!["Active", "Inactive"].includes(b.status)) {
+        return res.status(400).json({ error: "status must be Active or Inactive" });
+      }
+      values.push(b.status);
+      sets.push(`status = $${values.length}`);
+    }
+    if (b.role !== undefined) {
+      if (!VALID_ROLES.includes(b.role)) {
+        return res.status(400).json({ error: "invalid role" });
+      }
+      values.push(b.role);
+      sets.push(`role = $${values.length}`);
+    }
+    if (sets.length === 0) return res.status(400).json({ error: "no valid fields to update" });
+    values.push(req.params.email);
+    const { rows } = await pool.query(
+      `UPDATE users SET ${sets.join(", ")} WHERE email = $${values.length} RETURNING email, name, role, status, joined`,
+      values,
+    );
+    if (rows.length === 0) return res.status(404).json({ error: "user not found" });
+    res.json(rows[0]);
+  } catch (err) { next(err); }
 });
 
 // --- Taxonomy ---
