@@ -123,192 +123,17 @@ const PIECE_IMAGES: Record<string, string> = {
   p: "/pieces/Black-Pawn.svg",
 };
 
-const POOL_ROWS: PoolRow[] = [
-  {
-    id: "SR-3821",
-    title: "Carlsen vs Anand",
-    subtitle: "Wijk aan Zee 2013, Move 24",
-    fen: "2r2rk1/pp3ppp/2p5/3p4/3P4/2P2N2/PP3PPP/2R2RK1 w - - 0 24",
-    broadTags: ["Tactics", "Defender Manipulation"],
-    source: "CC games.pgn",
-    rating: "600 - 800",
-    status: "Submitted",
-    builder: "Arun",
-    priority: "Normal",
-    learningOutcome:
-      "Recognize when a defender of an attacked piece can be removed or distracted.",
-    solves:
-      "Students often stop calculating when a defended piece appears safe and miss ways to eliminate the defender.",
-    similarity: 92,
-    concept: "Removing the Defender",
-  },
-  {
-    id: "AS-2318",
-    title: "Kasparov vs Karpov",
-    subtitle: "Moscow 1986, Move 17",
-    fen: "r2q1rk1/pp2bppp/2n1pn2/2bp4/3P4/2NBPN2/PPQ2PPP/R1B2RK1 w - - 0 10",
-    broadTags: ["Strategy", "Pawn Structure"],
-    source: "CC strategic batch",
-    rating: "800 - 1000",
-    status: "New",
-    builder: "Unassigned",
-    priority: "High",
-    learningOutcome: "Detect when structure dictates the right piece regrouping plan.",
-    solves: "Players know motifs but fail to convert them into strategic plans.",
-    similarity: 44,
-    concept: "Pawn Lever Timing",
-  },
-  {
-    id: "AS-2404",
-    title: "Capablanca rook ending",
-    subtitle: "Generated endgame cluster",
-    fen: "8/5pk1/6p1/8/3R2P1/5P2/5K2/8 w - - 0 1",
-    broadTags: ["Endgames", "Rook Endings"],
-    source: "CC endgame generator",
-    rating: "1000 - 1200",
-    status: "Assigned",
-    builder: "Meena",
-    priority: "Normal",
-    learningOutcome: "Spot when king activity outweighs pawn count in rook endings.",
-    solves: "Learners overvalue material and underplay king activation.",
-    similarity: 37,
-    concept: "Active King in Rook Endings",
-  },
-  {
-    id: "AS-2497",
-    title: "Nakamura vs Radjabov",
-    subtitle: "Candidate move extraction",
-    fen: "r4rk1/pp3ppp/2p2n2/3p4/3P1B2/2N2N2/PP3PPP/2R2RK1 w - - 0 19",
-    broadTags: ["Calculation", "Pins"],
-    source: "CC games.pgn",
-    rating: "600 - 800",
-    status: "In Progress",
-    builder: "Vishu",
-    priority: "High",
-    learningOutcome: "Generate forcing candidate moves before settling on a quiet move.",
-    solves: "Students choose the first playable move instead of comparing forcing options.",
-    similarity: 58,
-    concept: "Forcing Candidate Moves",
-  },
-];
+const POOL_ROWS: PoolRow[] = [];
 
-const SIMILARITY_RESULTS: SimilarityCard[] = [
-  {
-    id: "KN-144",
-    title: "Removing the Defender",
-    domain: "Tactics",
-    topic: "Defender Manipulation",
-    rating: "600 - 800",
-    positionMatch: 94,
-    conceptMatch: "Exact",
-    learningOutcomeMatch: 86,
-    studentProblemMatch: 91,
-    solutionSimilarity: 73,
-    label: "94% Position Match",
-    fen: "2r2rk1/pp3ppp/2p5/3p4/3P4/2P2N2/PP3PPP/2R2RK1 w - - 0 24",
-  },
-  {
-    id: "KN-211",
-    title: "Removing the Defender",
-    domain: "Tactics",
-    topic: "Defender Manipulation",
-    rating: "800 - 1000",
-    positionMatch: 72,
-    conceptMatch: "Same Concept",
-    learningOutcomeMatch: 78,
-    studentProblemMatch: 82,
-    solutionSimilarity: 69,
-    label: "72% Position Match",
-    fen: "3r2k1/pp3ppp/2p5/3p4/3P4/2P2N2/PP3PPP/2R2RK1 w - - 0 24",
-  },
-  {
-    id: "KN-319",
-    title: "Same Student Problem",
-    domain: "Tactics",
-    topic: "Defender Manipulation",
-    rating: "400 - 600",
-    positionMatch: 48,
-    conceptMatch: "Related",
-    learningOutcomeMatch: 65,
-    studentProblemMatch: 88,
-    solutionSimilarity: 42,
-    label: "Same Student Problem",
-    fen: "6k1/1p3ppp/p1p5/3p4/3P4/2P2N2/PP3PPP/2R2RK1 w - - 0 24",
-  },
-];
+const SIMILARITY_RESULTS: SimilarityCard[] = [];
 
-const APPROVED_CONTENT: ApprovedCard[] = [
-  {
-    concept: "Removing the Defender",
-    domain: "Tactics",
-    topic: "Defender Manipulation",
-    types: ["Recognition", "Normal Action", "Common Mistake"],
-    positions: 18,
-    updated: "Aug 16, 2026",
-    coverage: "Strong in 600 - 1000, weak in 1000 - 1200",
-  },
-  {
-    concept: "Loose Piece Punishment",
-    domain: "Tactics",
-    topic: "Targets",
-    types: ["Recognition", "Importance"],
-    positions: 14,
-    updated: "Aug 15, 2026",
-    coverage: "Strong in 400 - 800",
-  },
-  {
-    concept: "Active King in Rook Endings",
-    domain: "Endgames",
-    topic: "Rook Endings",
-    types: ["Definition", "Normal Action"],
-    positions: 9,
-    updated: "Aug 14, 2026",
-    coverage: "Missing under 600",
-  },
-];
+const APPROVED_CONTENT: ApprovedCard[] = [];
 
-const TAXONOMY: TaxonomyNode[] = [
-  {
-    domain: "Tactics",
-    topics: [
-      { name: "Defender Manipulation", concepts: ["Removing the Defender", "Deflection", "Overloaded Defender"] },
-      { name: "Pins", concepts: ["Absolute Pin", "Relative Pin", "Pin Breaks"] },
-    ],
-  },
-  {
-    domain: "Calculation",
-    topics: [{ name: "Candidate Moves", concepts: ["Forcing Candidate Moves", "Checks First Scan"] }],
-  },
-  {
-    domain: "Endgames",
-    topics: [{ name: "Rook Endings", concepts: ["Active King in Rook Endings", "Cutoff King", "Lucena Entry"] }],
-  },
-];
+const TAXONOMY: TaxonomyNode[] = [];
 
-const USERS: UserRow[] = [
-  { name: "Vishu KA", email: "vishu@circlechess.com", role: "Knowledge Architect", status: "Active", joined: "May 10, 2024" },
-  { name: "Arun Sharma", email: "arun.builder@circlechess.com", role: "Builder", status: "Active", joined: "May 12, 2024" },
-  { name: "Meena R", email: "meena.builder@circlechess.com", role: "Builder", status: "Active", joined: "May 14, 2024" },
-  { name: "Ravi K", email: "ravi.review@circlechess.com", role: "Peer Reviewer", status: "Active", joined: "May 15, 2024" },
-  { name: "Sneha P", email: "sneha.builder@circlechess.com", role: "Builder", status: "Inactive", joined: "May 17, 2024" },
-  { name: "Prakash Admin", email: "prakash.admin@circlechess.com", role: "Admin", status: "Active", joined: "May 08, 2024" },
-];
+const USERS: UserRow[] = [];
 
-const IMPORT_SUMMARY = [
-  { label: "PGN Files", value: "3" },
-  { label: "Games Found", value: "512" },
-  { label: "Positions Extracted", value: "2,348" },
-  { label: "Potential Duplicates", value: "28" },
-  { label: "Partial Matches", value: "96" },
-  { label: "Manual Review", value: "14" },
-];
-
-const DASHBOARD_METRICS = [
-  { label: "Imported This Week", value: "2,348", delta: "+14%" },
-  { label: "Assigned to Builders", value: "418", delta: "+22%" },
-  { label: "Awaiting Review", value: "37", delta: "6 high risk" },
-  { label: "Approved Knowledge", value: "1,284", delta: "+52 today" },
-];
+const DASHBOARD_METRICS: { label: string; value: string; delta: string }[] = [];
 
 function statusPill(status: PositionStatus) {
   const meta = STATUS_META[status];
@@ -377,13 +202,17 @@ function MetricCard({ label, value, delta }: { label: string; value: string; del
   );
 }
 
+function EmptyState({ message }: { message: string }) {
+  return <div className="empty-state">{message}</div>;
+}
+
 function App() {
   const [activePage, setActivePage] = useState<PageId>("import");
-  const [selectedRowId, setSelectedRowId] = useState<string>(POOL_ROWS[0].id);
+  const [selectedRowId, setSelectedRowId] = useState<string>("");
   const [selectedAssignmentTab, setSelectedAssignmentTab] = useState("All");
 
   const selectedRow = useMemo(
-    () => POOL_ROWS.find((row) => row.id === selectedRowId) ?? POOL_ROWS[0],
+    () => POOL_ROWS.find((row) => row.id === selectedRowId),
     [selectedRowId],
   );
 
@@ -395,6 +224,13 @@ function App() {
   }, [selectedAssignmentTab]);
 
   function renderDashboard() {
+    if (!selectedRow) {
+      return (
+        <section className="page-stack">
+          <EmptyState message="No positions have been imported yet." />
+        </section>
+      );
+    }
     return (
       <section className="page-stack">
         <div className="hero-card">
@@ -491,9 +327,9 @@ function App() {
       <section className="page-stack">
         <div className="page-title">
           <div>
-            <span className="section-kicker">1. Import / Generate Positions</span>
+            <span className="section-kicker">1. Import Positions</span>
             <h2>Knowledge Architect intake</h2>
-            <p>Support PGN uploads, pasted FENs, generated positions, and broad metadata before import.</p>
+            <p>Upload PGN files and add broad metadata before import.</p>
           </div>
           <button type="button">Import &amp; Analyze</button>
         </div>
@@ -502,10 +338,6 @@ function App() {
           <section className="panel">
             <div className="tab-strip">
               <span className="tab active">Upload PGN</span>
-              <span className="tab">Paste PGN</span>
-              <span className="tab">Paste FEN</span>
-              <span className="tab">Generate Positions</span>
-              <span className="tab">Import Opening</span>
             </div>
             <div className="upload-box">
               <div className="upload-icon">+</div>
@@ -559,11 +391,6 @@ function App() {
                 </select>
               </label>
             </div>
-            <div className="tag-row">
-              <span className="tag blue">Tactics</span>
-              <span className="tag blue">Defender Manipulation</span>
-              <span className="tag blue">CC Content Batch</span>
-            </div>
           </section>
 
           <section className="panel">
@@ -574,7 +401,7 @@ function App() {
               </div>
             </div>
             <ul className="bullet-list">
-              <li>Upload PGNs, paste PGN/FEN, and support generated positions.</li>
+              <li>Upload PGN files for position extraction.</li>
               <li>Show exact duplicates, existing positions, and partial overlaps.</li>
               <li>Apply initial domain, rating, source type, and broad tags before import.</li>
               <li>Treat chess positions separately from instructional knowledge items.</li>
@@ -582,22 +409,6 @@ function App() {
           </section>
         </div>
 
-        <section className="panel">
-          <div className="panel-header">
-            <div>
-              <span className="section-kicker">Import Summary</span>
-              <h3>Preview before final import</h3>
-            </div>
-          </div>
-          <div className="metric-grid compact">
-            {IMPORT_SUMMARY.map((item) => (
-              <article key={item.label} className="metric-card compact">
-                <span>{item.label}</span>
-                <strong>{item.value}</strong>
-              </article>
-            ))}
-          </div>
-        </section>
       </section>
     );
   }
@@ -650,7 +461,7 @@ function App() {
               </thead>
               <tbody>
                 {POOL_ROWS.map((row) => (
-                  <tr key={row.id} className={selectedRow.id === row.id ? "active-row" : ""} onClick={() => setSelectedRowId(row.id)}>
+                  <tr key={row.id} className={selectedRow?.id === row.id ? "active-row" : ""} onClick={() => setSelectedRowId(row.id)}>
                     <td><ChessBoard fen={row.fen} size="small" /></td>
                     <td>
                       <strong>{row.title}</strong>
@@ -692,10 +503,10 @@ function App() {
         </div>
 
         <div className="metric-grid compact">
-          <MetricCard label="Assigned" value="14" delta="4 due this week" />
-          <MetricCard label="In Progress" value="9" delta="2 autosaved now" />
-          <MetricCard label="Changes Requested" value="3" delta="Reviewer notes added" />
-          <MetricCard label="Completed" value="22" delta="7 approved this week" />
+          <MetricCard label="Assigned" value="0" delta="No assignments" />
+          <MetricCard label="In Progress" value="0" delta="No work in progress" />
+          <MetricCard label="Changes Requested" value="0" delta="No requested changes" />
+          <MetricCard label="Completed" value="0" delta="No completed work" />
         </div>
 
         <div className="tab-strip wide">
@@ -745,6 +556,7 @@ function App() {
   }
 
   function renderBuilderPage() {
+    if (!selectedRow) return <EmptyState message="No position is available to build." />;
     return (
       <section className="page-stack">
         <div className="page-title">
@@ -855,6 +667,9 @@ function App() {
   }
 
   function renderSimilarityPage() {
+    if (SIMILARITY_RESULTS.length === 0) {
+      return <EmptyState message="No similarity results are available." />;
+    }
     return (
       <section className="page-stack">
         <div className="page-title">
@@ -934,6 +749,7 @@ function App() {
   }
 
   function renderReviewPage() {
+    if (!selectedRow) return <EmptyState message="There are no submissions to review." />;
     return (
       <section className="page-stack">
         <div className="page-title">
@@ -1041,6 +857,7 @@ function App() {
                 <small>Last updated {item.updated}</small>
               </article>
             ))}
+            {APPROVED_CONTENT.length === 0 && <EmptyState message="No approved content yet." />}
           </div>
         </section>
       </section>
@@ -1079,6 +896,7 @@ function App() {
               ))}
             </article>
           ))}
+          {TAXONOMY.length === 0 && <EmptyState message="No taxonomy entries yet." />}
         </div>
       </section>
     );
@@ -1122,6 +940,9 @@ function App() {
                     <td>{user.joined}</td>
                   </tr>
                 ))}
+                {USERS.length === 0 && (
+                  <tr><td colSpan={5}>No users have been added.</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1184,13 +1005,6 @@ function App() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="user-chip">
-            <div className="avatar">VK</div>
-            <div>
-              <strong>Vishu KA</strong>
-              <p>Knowledge Architect</p>
-            </div>
-          </div>
           <div className="sidebar-note">
             <span className="section-kicker">Core Pipeline</span>
             <p>Import → Position Pool → Assign → Builder Tagging → Similarity → Review → Approved KB</p>
@@ -1206,7 +1020,6 @@ function App() {
           </div>
           <div className="header-actions">
             <span className="pill neutral">Desktop-first MVP</span>
-            <span className="pill info">CC content seeded</span>
           </div>
         </header>
         {renderActivePage()}
