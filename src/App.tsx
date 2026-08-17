@@ -219,6 +219,11 @@ function App() {
 
   const [builderNames, setBuilderNames] = useState<string[]>([]);
 
+  // Builder Workspace controlled fields
+  const [builderLearningOutcome, setBuilderLearningOutcome] = useState("");
+  const [builderSolves, setBuilderSolves] = useState("");
+  const [builderConcept, setBuilderConcept] = useState("");
+
   useEffect(() => {
     let cancelled = false;
     api
@@ -292,6 +297,14 @@ function App() {
     () => poolRows.find((row) => row.id === selectedRowId) ?? poolRows[0],
     [poolRows, selectedRowId],
   );
+
+  // Sync builder workspace fields when the selected position changes
+  useEffect(() => {
+    if (!selectedRow) return;
+    setBuilderLearningOutcome(selectedRow.learningOutcome ?? "");
+    setBuilderSolves(selectedRow.solves ?? "");
+    setBuilderConcept(selectedRow.concept ?? "");
+  }, [selectedRow?.id]);
 
   const assignmentRows = useMemo(() => {
     if (selectedAssignmentTab === "All") {
@@ -718,7 +731,14 @@ function App() {
             <span className="pill info">Autosaved 2 min ago</span>
             <button
               type="button"
-              onClick={() => updatePosition(selectedRow.id, { status: "Submitted" })}
+              onClick={() =>
+                updatePosition(selectedRow.id, {
+                  status: "Submitted",
+                  learningOutcome: builderLearningOutcome,
+                  solves: builderSolves,
+                  concept: builderConcept,
+                })
+              }
             >
               Submit
             </button>
@@ -781,9 +801,19 @@ function App() {
               </label>
               <label>
                 Concept
-                <select defaultValue="Removing the Defender">
-                  <option>Removing the Defender</option>
-                  <option>Deflection</option>
+                <select
+                  value={builderConcept}
+                  onChange={(event) => setBuilderConcept(event.target.value)}
+                  onBlur={() => updatePosition(selectedRow.id, { concept: builderConcept })}
+                >
+                  {taxonomy.flatMap((node) =>
+                    node.topics.flatMap((topic) =>
+                      topic.concepts.map((c) => <option key={c}>{c}</option>),
+                    ),
+                  )}
+                  {builderConcept && !taxonomy.some((node) =>
+                    node.topics.some((topic) => topic.concepts.includes(builderConcept))
+                  ) ? <option>{builderConcept}</option> : null}
                 </select>
               </label>
               <label>
@@ -807,11 +837,21 @@ function App() {
               </label>
               <label className="span-2">
                 Learning Outcome
-                <textarea rows={4} defaultValue={selectedRow.learningOutcome} />
+                <textarea
+                  rows={4}
+                  value={builderLearningOutcome}
+                  onChange={(event) => setBuilderLearningOutcome(event.target.value)}
+                  onBlur={() => updatePosition(selectedRow.id, { learningOutcome: builderLearningOutcome })}
+                />
               </label>
               <label className="span-2">
                 What This Solves
-                <textarea rows={4} defaultValue={selectedRow.solves} />
+                <textarea
+                  rows={4}
+                  value={builderSolves}
+                  onChange={(event) => setBuilderSolves(event.target.value)}
+                  onBlur={() => updatePosition(selectedRow.id, { solves: builderSolves })}
+                />
               </label>
             </div>
           </section>
