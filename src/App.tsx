@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Chess } from "chess.js";
 import {
   api,
   type ApprovedCard,
@@ -210,12 +211,17 @@ function App() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const [importTab, setImportTab] = useState<"upload-pgn" | "paste-pgn" | "paste-fen" | "generate" | "opening">("paste-fen");
   const [importTitle, setImportTitle] = useState("");
   const [importFen, setImportFen] = useState("");
   const [importDomain, setImportDomain] = useState("Tactics");
   const [importRating, setImportRating] = useState("600 - 800");
   const [importSource, setImportSource] = useState("Game");
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [pgnText, setPgnText] = useState("");
+  const [pgnParseError, setPgnParseError] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const pgnFileRef = useRef<HTMLInputElement>(null);
 
   const [builderNames, setBuilderNames] = useState<string[]>([]);
 
@@ -400,11 +406,53 @@ function App() {
     }
   }
 
+  function applyParsedPgn(pgn: string) {
+    setPgnParseError(null);
+    try {
+      const chess = new Chess();
+      chess.loadPgn(pgn.trim());
+      const h = chess.header() as Record<string, string>;
+      const white = h.White ?? "White";
+      const black = h.Black ?? "Black";
+      const event = h.Event && h.Event !== "?" ? ` — ${h.Event}` : "";
+      const round = h.Round && h.Round !== "?" ? ` Rd.${h.Round}` : "";
+      setImportTitle(`${white} vs ${black}${event}${round}`);
+      setImportFen(chess.fen());
+      setImportSource("Game");
+      setImportNotice("PGN parsed — review the position and click Import & Analyze.");
+    } catch {
+      setPgnParseError("Could not parse PGN. Make sure it is a valid PGN string.");
+    }
+  }
+
+  function handlePgnTextParse() {
+    if (!pgnText.trim()) {
+      setPgnParseError("Paste a PGN before parsing.");
+      return;
+    }
+    applyParsedPgn(pgnText);
+  }
+
+  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      setPgnText(text);
+      applyParsedPgn(text);
+    };
+    reader.readAsText(file);
+    // Reset so same file can be re-selected
+    event.target.value = "";
+  }
+
   async function handleImport() {
     if (!importFen.trim() || !importTitle.trim()) {
       setImportNotice("Enter a position title and a FEN before importing.");
       return;
     }
+    setImportBusy(true);
     try {
       const created = await api.createPosition({
         title: importTitle.trim(),
@@ -418,9 +466,12 @@ function App() {
       setSelectedRowId(created.id);
       setImportTitle("");
       setImportFen("");
+      setPgnText("");
       setImportNotice(`Imported ${created.id} into the position pool.`);
     } catch (err) {
       setImportNotice(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImportBusy(false);
     }
   }
 
@@ -524,22 +575,114 @@ function App() {
   }
 
   function renderImportPage() {
-    return (
-      <section className="page-stack">
-        <div className="page-title">
-          <div>
-            <span className="section-kicker">1. Import Positions</span>
-            <h2>Knowledge Architect intake</h2>
-            <p>Upload PGN files and add broad metadata before import.</p>
-          </div>
-          <button type="button" onClick={handleImport}>Import &amp; Analyze</button>
-        </div>
+    const IMPORT_TABS: { id: typeof importTab; label: string }[] = [
+      { id: "upload-pgn", label: "Upload PGN" },
+      { id: "paste-pgn", label: "Paste PGN" },
+      { id: "paste-fen", label: "Paste FEN" },
+      { id: "generate", label: "Generate Positions" },
+      { id: "opening", label: "Import Opening" },
+    ];
 
-        <div className="three-up">
-          <section className="panel">
-            <div className="tab-strip">
-              <span className="tab active">Upload PGN</span>
+    const canImport = importTab === "paste-fen"
+      ? importTitle.trim() && importFen.trim()
+      : importTab === "upload-pgn" || importTab === "paste-pgn"
+        ? importFen.trim() && importTitle.trim()
+        : false;
+
+    function renderTabPanel() {
+      if (importTab === "upload-pgn") {
+        return (
+          <>
+            <input
+              ref={pgnFileRef}
+              type="file"
+              accept=".pgn,.txt"
+              style={{ display: "none" }}
+              onChange={handleFileUpload}
+            />
+            <div
+              className="upload-box"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                  const text = ev.target?.result as string;
+                  setPgnText(text);
+                  applyParsedPgn(text);
+                };
+                reader.readAsText(file);
+              }}
+            >
+              <div className="upload-icon">+</div>
+              <strong>Drag and drop a PGN file here</strong>
+              <p>Supports single-game PGN files. Max 50 MB.</p>
+              <button type="button" onClick={() => pgnFileRef.current?.click()}>
+                Choose File
+              </button>
             </div>
+            {pgnParseError ? <p className="import-notice error">{pgnParseError}</p> : null}
+            {importFen && !pgnParseError ? (
+              <div className="form-grid" style={{ marginTop: "0.75rem" }}>
+                <label className="span-2">
+                  Position Title (editable)
+                  <input value={importTitle} onChange={(e) => setImportTitle(e.target.value)} />
+                </label>
+                <label className="span-2">
+                  FEN (final position)
+                  <input value={importFen} onChange={(e) => setImportFen(e.target.value)} />
+                </label>
+                <p className="import-notice span-2" style={{ marginTop: 0 }}>
+                  {importNotice}
+                </p>
+              </div>
+            ) : null}
+          </>
+        );
+      }
+
+      if (importTab === "paste-pgn") {
+        return (
+          <>
+            <div className="form-grid">
+              <label className="span-2">
+                PGN
+                <textarea
+                  rows={7}
+                  placeholder={"[Event \"Wijk aan Zee\"]\n[White \"Carlsen, M\"]\n[Black \"Anand, V\"]\n\n1. e4 e5 2. Nf3 ..."}
+                  value={pgnText}
+                  onChange={(e) => { setPgnText(e.target.value); setPgnParseError(null); }}
+                />
+              </label>
+            </div>
+            {pgnParseError ? <p className="import-notice error">{pgnParseError}</p> : null}
+            <button type="button" onClick={handlePgnTextParse} style={{ marginTop: "0.5rem" }}>
+              Parse PGN
+            </button>
+            {importFen && !pgnParseError ? (
+              <div className="form-grid" style={{ marginTop: "0.75rem" }}>
+                <label className="span-2">
+                  Position Title (editable)
+                  <input value={importTitle} onChange={(e) => setImportTitle(e.target.value)} />
+                </label>
+                <label className="span-2">
+                  FEN (final position)
+                  <input value={importFen} onChange={(e) => setImportFen(e.target.value)} />
+                </label>
+                <p className="import-notice span-2" style={{ marginTop: 0 }}>
+                  {importNotice}
+                </p>
+              </div>
+            ) : null}
+          </>
+        );
+      }
+
+      if (importTab === "paste-fen") {
+        return (
+          <>
             <div className="form-grid">
               <label className="span-2">
                 Position Title
@@ -560,6 +703,64 @@ function App() {
               </label>
             </div>
             {importNotice ? <p className="import-notice">{importNotice}</p> : null}
+          </>
+        );
+      }
+
+      // generate / opening — informational
+      const isGenerate = importTab === "generate";
+      return (
+        <div className="upload-box" style={{ textAlign: "left", padding: "1.5rem" }}>
+          <strong style={{ display: "block", marginBottom: "0.5rem" }}>
+            {isGenerate ? "Generate Positions" : "Import Opening"}
+          </strong>
+          <p style={{ color: "var(--text-muted)", margin: 0 }}>
+            {isGenerate
+              ? "Position generation by criteria (rating band, theme, engine evaluation) is coming soon. For now, use Paste FEN or Upload PGN to add positions manually."
+              : "Opening tree import is coming soon. You will be able to load an ECO line and extract instructional moments automatically. Use Paste PGN in the meantime."}
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <section className="page-stack">
+        <div className="page-title">
+          <div>
+            <span className="section-kicker">1. Import / Generate Positions</span>
+            <h2>Knowledge Architect intake</h2>
+            <p>Support PGN uploads, pasted FENs, generated positions, and broad metadata before import.</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleImport}
+            disabled={!canImport || importBusy}
+          >
+            {importBusy ? "Importing…" : "Import & Analyze"}
+          </button>
+        </div>
+
+        <div className="three-up">
+          <section className="panel">
+            <div className="tab-strip">
+              {IMPORT_TABS.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`tab ${importTab === tab.id ? "active" : ""}`}
+                  onClick={() => {
+                    setImportTab(tab.id);
+                    setPgnParseError(null);
+                    setImportNotice(null);
+                  }}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <div style={{ padding: "1rem 0 0" }}>
+              {renderTabPanel()}
+            </div>
           </section>
 
           <section className="panel">
@@ -606,24 +807,49 @@ function App() {
                 </select>
               </label>
             </div>
+            <div className="tag-row">
+              <span className="tag blue">{importDomain}</span>
+              <span className="tag blue">{importRating}</span>
+            </div>
           </section>
 
           <section className="panel">
             <div className="panel-header">
               <div>
-                <span className="section-kicker">PRD Coverage</span>
-                <h3>Import workflow included</h3>
+                <span className="section-kicker">How it works</span>
+                <h3>Import workflow</h3>
               </div>
             </div>
             <ul className="bullet-list">
-              <li>Upload PGN files for position extraction.</li>
-              <li>Show exact duplicates, existing positions, and partial overlaps.</li>
-              <li>Apply initial domain, rating, source type, and broad tags before import.</li>
-              <li>Treat chess positions separately from instructional knowledge items.</li>
+              <li><strong>Upload PGN</strong> — drag a .pgn file; title and FEN auto-fill from headers.</li>
+              <li><strong>Paste PGN</strong> — paste a game in PGN format and click Parse PGN.</li>
+              <li><strong>Paste FEN</strong> — enter a title and any valid FEN string directly.</li>
+              <li>Set domain, rating range, and source type, then click Import & Analyze.</li>
             </ul>
           </section>
         </div>
 
+        {importFen ? (
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <span className="section-kicker">Preview</span>
+                <h3>{importTitle || "Untitled position"}</h3>
+              </div>
+            </div>
+            <div className="featured-board">
+              <ChessBoard fen={importFen} />
+              <div className="feature-copy">
+                <dl className="detail-grid">
+                  <div><dt>FEN</dt><dd style={{ fontFamily: "monospace", fontSize: "0.75rem", wordBreak: "break-all" }}>{importFen}</dd></div>
+                  <div><dt>Domain</dt><dd>{importDomain}</dd></div>
+                  <div><dt>Rating</dt><dd>{importRating}</dd></div>
+                  <div><dt>Source</dt><dd>{importSource}</dd></div>
+                </dl>
+              </div>
+            </div>
+          </section>
+        ) : null}
       </section>
     );
   }
