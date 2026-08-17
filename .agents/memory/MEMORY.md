@@ -1,0 +1,1 @@
+- [Backend auth expectations](backend-auth-review.md) — new API endpoints must have session auth + server-side role checks; never seed shared default passwords.

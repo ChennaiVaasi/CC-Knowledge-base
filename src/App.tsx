@@ -1,4 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  api,
+  type ApprovedCard,
+  type PoolRow,
+  type PositionStatus,
+  type SimilarityCard,
+  type TaxonomyNode,
+  type UserRow,
+} from "./lib/api";
 
 type PageId =
   | "dashboard"
@@ -14,76 +23,10 @@ type PageId =
 
 type StatusTone = "neutral" | "info" | "warning" | "success" | "danger";
 
-type PositionStatus =
-  | "New"
-  | "Assigned"
-  | "In Progress"
-  | "Submitted"
-  | "Changes Requested"
-  | "Approved";
-
 type NavItem = {
   id: PageId;
   label: string;
   section: string;
-};
-
-type PoolRow = {
-  id: string;
-  title: string;
-  subtitle: string;
-  fen: string;
-  broadTags: string[];
-  source: string;
-  rating: string;
-  status: PositionStatus;
-  builder: string;
-  priority: "Low" | "Normal" | "High";
-  learningOutcome: string;
-  solves: string;
-  similarity: number;
-  concept: string;
-};
-
-type SimilarityCard = {
-  id: string;
-  title: string;
-  domain: string;
-  topic: string;
-  rating: string;
-  positionMatch: number;
-  conceptMatch: string;
-  learningOutcomeMatch: number;
-  studentProblemMatch: number;
-  solutionSimilarity: number;
-  label: string;
-  fen: string;
-};
-
-type ApprovedCard = {
-  concept: string;
-  domain: string;
-  topic: string;
-  types: string[];
-  positions: number;
-  updated: string;
-  coverage: string;
-};
-
-type TaxonomyNode = {
-  domain: string;
-  topics: {
-    name: string;
-    concepts: string[];
-  }[];
-};
-
-type UserRow = {
-  name: string;
-  email: string;
-  role: string;
-  status: "Active" | "Inactive";
-  joined: string;
 };
 
 const NAV_ITEMS: NavItem[] = [
@@ -123,15 +66,10 @@ const PIECE_IMAGES: Record<string, string> = {
   p: "/pieces/Black-Pawn.svg",
 };
 
-const POOL_ROWS: PoolRow[] = [];
 
-const SIMILARITY_RESULTS: SimilarityCard[] = [];
 
-const APPROVED_CONTENT: ApprovedCard[] = [];
 
-const TAXONOMY: TaxonomyNode[] = [];
 
-const USERS: UserRow[] = [];
 
 const DASHBOARD_METRICS: { label: string; value: string; delta: string }[] = [];
 
@@ -202,26 +140,210 @@ function MetricCard({ label, value, delta }: { label: string; value: string; del
   );
 }
 
-function EmptyState({ message }: { message: string }) {
-  return <div className="empty-state">{message}</div>;
+function LoginScreen({ onLogin }: { onLogin: (user: UserRow) => void }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const user = await api.login(email.trim(), password);
+      onLogin(user);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="app-shell login-shell">
+      <form className="panel login-panel" onSubmit={submit}>
+        <div className="brand-mark">CK</div>
+        <h1>CC Knowledge Base</h1>
+        <p>Sign in to the instructional knowledge pipeline.</p>
+        <label>
+          Email
+          <input
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            placeholder="you@circlechess.com"
+            autoComplete="username"
+            required
+          />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </label>
+        {error ? <p className="login-error">{error}</p> : null}
+        <button type="submit" disabled={busy}>{busy ? "Signing in..." : "Sign In"}</button>
+      </form>
+    </div>
+  );
 }
 
 function App() {
+  const [currentUser, setCurrentUser] = useState<UserRow | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [activePage, setActivePage] = useState<PageId>("import");
   const [selectedRowId, setSelectedRowId] = useState<string>("");
   const [selectedAssignmentTab, setSelectedAssignmentTab] = useState("All");
 
+  const [poolRows, setPoolRows] = useState<PoolRow[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
+  const [taxonomy, setTaxonomy] = useState<TaxonomyNode[]>([]);
+  const [similarityResults, setSimilarityResults] = useState<SimilarityCard[]>([]);
+  const [approvedContent, setApprovedContent] = useState<ApprovedCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const [importTitle, setImportTitle] = useState("");
+  const [importFen, setImportFen] = useState("");
+  const [importDomain, setImportDomain] = useState("Tactics");
+  const [importRating, setImportRating] = useState("600 - 800");
+  const [importSource, setImportSource] = useState("Game");
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+
+  const [builderNames, setBuilderNames] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .me()
+      .then((user) => {
+        if (!cancelled) setCurrentUser(user);
+      })
+      .catch(() => {
+        // Not logged in.
+      })
+      .finally(() => {
+        if (!cancelled) setAuthChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const canManageUsers =
+    currentUser?.role === "Admin" ||
+    currentUser?.role === "Knowledge Architect" ||
+    currentUser?.role === "Peer Reviewer";
+
+  useEffect(() => {
+    if (!currentUser) return;
+    let cancelled = false;
+    setLoading(true);
+    async function load() {
+      try {
+        const [positions, taxonomyRows, similarity, approved, builders, userRows] = await Promise.all([
+          api.getPositions(),
+          api.getTaxonomy(),
+          api.getSimilarity(),
+          api.getApproved(),
+          api.getBuilders(),
+          canManageUsers ? api.getUsers() : Promise.resolve<UserRow[]>([]),
+        ]);
+        if (cancelled) return;
+        setPoolRows(positions);
+        setUsers(userRows);
+        setTaxonomy(taxonomyRows);
+        setSimilarityResults(similarity);
+        setApprovedContent(approved);
+        setBuilderNames(builders.map((name) => name.split(" ")[0]));
+        setSelectedRowId((current) => current || positions[0]?.id || "");
+        setLoadError(null);
+      } catch (err) {
+        if (!cancelled) setLoadError(err instanceof Error ? err.message : "Failed to load data");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, canManageUsers]);
+
+  async function handleLogout() {
+    try {
+      await api.logout();
+    } finally {
+      setCurrentUser(null);
+      setPoolRows([]);
+      setUsers([]);
+      setSelectedRowId("");
+    }
+  }
+
   const selectedRow = useMemo(
-    () => POOL_ROWS.find((row) => row.id === selectedRowId),
-    [selectedRowId],
+    () => poolRows.find((row) => row.id === selectedRowId) ?? poolRows[0],
+    [poolRows, selectedRowId],
   );
 
   const assignmentRows = useMemo(() => {
     if (selectedAssignmentTab === "All") {
-      return POOL_ROWS.filter((row) => row.builder !== "Unassigned");
+      return poolRows.filter((row) => row.builder !== "Unassigned");
     }
-    return POOL_ROWS.filter((row) => row.status === selectedAssignmentTab);
-  }, [selectedAssignmentTab]);
+    return poolRows.filter((row) => row.status === selectedAssignmentTab);
+  }, [poolRows, selectedAssignmentTab]);
+
+  async function updatePosition(id: string, data: Partial<PoolRow>) {
+    try {
+      const updated = await api.updatePosition(id, data);
+      setPoolRows((rows) => rows.map((row) => (row.id === id ? updated : row)));
+      setActionError(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Update failed");
+    }
+  }
+
+  async function assignBuilder(id: string, builder: string) {
+    const row = poolRows.find((item) => item.id === id);
+    const data: Partial<PoolRow> = { builder };
+    if (builder === "Unassigned") {
+      data.status = "New";
+    } else if (row && (row.status === "New" || row.status === "Assigned")) {
+      data.status = "Assigned";
+    }
+    await updatePosition(id, data);
+  }
+
+  async function handleImport() {
+    if (!importFen.trim() || !importTitle.trim()) {
+      setImportNotice("Enter a position title and a FEN before importing.");
+      return;
+    }
+    try {
+      const created = await api.createPosition({
+        title: importTitle.trim(),
+        subtitle: "Manual import",
+        fen: importFen.trim(),
+        broadTags: [importDomain],
+        source: `${importSource} import`,
+        rating: importRating,
+      });
+      setPoolRows((rows) => [...rows, created]);
+      setSelectedRowId(created.id);
+      setImportTitle("");
+      setImportFen("");
+      setImportNotice(`Imported ${created.id} into the position pool.`);
+    } catch (err) {
+      setImportNotice(err instanceof Error ? err.message : "Import failed");
+    }
+  }
 
   function renderDashboard() {
     if (!selectedRow) {
@@ -265,7 +387,7 @@ function App() {
               </div>
             </div>
             <div className="stack-list">
-              {POOL_ROWS.map((row) => (
+              {poolRows.map((row) => (
                 <button
                   key={row.id}
                   type="button"
@@ -331,7 +453,7 @@ function App() {
             <h2>Knowledge Architect intake</h2>
             <p>Upload PGN files and add broad metadata before import.</p>
           </div>
-          <button type="button">Import &amp; Analyze</button>
+          <button type="button" onClick={handleImport}>Import &amp; Analyze</button>
         </div>
 
         <div className="three-up">
@@ -339,12 +461,26 @@ function App() {
             <div className="tab-strip">
               <span className="tab active">Upload PGN</span>
             </div>
-            <div className="upload-box">
-              <div className="upload-icon">+</div>
-              <strong>Drag and drop PGN files here</strong>
-              <p>Supports multi-file upload from CC game batches. Max 50MB each.</p>
-              <button type="button">Choose Files</button>
+            <div className="form-grid">
+              <label className="span-2">
+                Position Title
+                <input
+                  placeholder="e.g. Carlsen vs Anand"
+                  value={importTitle}
+                  onChange={(event) => setImportTitle(event.target.value)}
+                />
+              </label>
+              <label className="span-2">
+                FEN
+                <textarea
+                  rows={3}
+                  placeholder="Paste a FEN string here..."
+                  value={importFen}
+                  onChange={(event) => setImportFen(event.target.value)}
+                />
+              </label>
             </div>
+            {importNotice ? <p className="import-notice">{importNotice}</p> : null}
           </section>
 
           <section className="panel">
@@ -357,7 +493,7 @@ function App() {
             <div className="form-grid">
               <label>
                 Initial Domain
-                <select defaultValue="Tactics">
+                <select value={importDomain} onChange={(event) => setImportDomain(event.target.value)}>
                   <option>Tactics</option>
                   <option>Calculation</option>
                   <option>Endgames</option>
@@ -366,7 +502,7 @@ function App() {
               </label>
               <label>
                 Rating Range
-                <select defaultValue="600 - 800">
+                <select value={importRating} onChange={(event) => setImportRating(event.target.value)}>
                   <option>400 - 600</option>
                   <option>600 - 800</option>
                   <option>800 - 1000</option>
@@ -375,7 +511,7 @@ function App() {
               </label>
               <label>
                 Source Type
-                <select defaultValue="Game">
+                <select value={importSource} onChange={(event) => setImportSource(event.target.value)}>
                   <option>Game</option>
                   <option>FEN</option>
                   <option>Puzzle</option>
@@ -460,8 +596,8 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {POOL_ROWS.map((row) => (
-                  <tr key={row.id} className={selectedRow?.id === row.id ? "active-row" : ""} onClick={() => setSelectedRowId(row.id)}>
+                {poolRows.map((row) => (
+                  <tr key={row.id} className={selectedRow.id === row.id ? "active-row" : ""} onClick={() => setSelectedRowId(row.id)}>
                     <td><ChessBoard fen={row.fen} size="small" /></td>
                     <td>
                       <strong>{row.title}</strong>
@@ -478,7 +614,20 @@ function App() {
                     <td>{row.source}</td>
                     <td>{row.rating}</td>
                     <td>{statusPill(row.status)}</td>
-                    <td>{row.builder}</td>
+                    <td onClick={(event) => event.stopPropagation()}>
+                      <select
+                        value={row.builder}
+                        onChange={(event) => assignBuilder(row.id, event.target.value)}
+                      >
+                        <option>Unassigned</option>
+                        {builderNames.map((name) => (
+                          <option key={name}>{name}</option>
+                        ))}
+                        {row.builder !== "Unassigned" && !builderNames.includes(row.builder) ? (
+                          <option>{row.builder}</option>
+                        ) : null}
+                      </select>
+                    </td>
                     <td>{row.priority}</td>
                   </tr>
                 ))}
@@ -567,7 +716,12 @@ function App() {
           </div>
           <div className="header-actions">
             <span className="pill info">Autosaved 2 min ago</span>
-            <button type="button">Submit</button>
+            <button
+              type="button"
+              onClick={() => updatePosition(selectedRow.id, { status: "Submitted" })}
+            >
+              Submit
+            </button>
           </div>
         </div>
 
@@ -689,7 +843,7 @@ function App() {
               </div>
             </div>
             <div className="stack-list">
-              {SIMILARITY_RESULTS.map((item) => (
+              {similarityResults.map((item) => (
                 <article key={item.id} className="similarity-card">
                   <ChessBoard fen={item.fen} size="small" />
                   <div className="similarity-copy">
@@ -811,9 +965,27 @@ function App() {
               <textarea rows={8} placeholder="Add review notes here..." />
             </label>
             <div className="action-row full-width">
-              <button type="button" className="warning-button">Request Changes</button>
-              <button type="button" className="danger-button">Reject</button>
-              <button type="button" className="success-button">Approve</button>
+              <button
+                type="button"
+                className="warning-button"
+                onClick={() => updatePosition(selectedRow.id, { status: "Changes Requested" })}
+              >
+                Request Changes
+              </button>
+              <button
+                type="button"
+                className="danger-button"
+                onClick={() => updatePosition(selectedRow.id, { status: "New", builder: "Unassigned" })}
+              >
+                Reject
+              </button>
+              <button
+                type="button"
+                className="success-button"
+                onClick={() => updatePosition(selectedRow.id, { status: "Approved" })}
+              >
+                Approve
+              </button>
             </div>
           </section>
         </div>
@@ -839,7 +1011,7 @@ function App() {
             <button type="button" className="ghost-button">Export</button>
           </div>
           <div className="card-grid">
-            {APPROVED_CONTENT.map((item) => (
+            {approvedContent.map((item) => (
               <article key={item.concept} className="approved-card">
                 <div className="assignment-head">
                   <div>
@@ -876,7 +1048,7 @@ function App() {
           <button type="button">Add Concept</button>
         </div>
         <div className="card-grid taxonomy-grid">
-          {TAXONOMY.map((node) => (
+          {taxonomy.map((node) => (
             <article key={node.domain} className="panel taxonomy-card">
               <div className="panel-header">
                 <div>
@@ -931,7 +1103,7 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {USERS.map((user) => (
+                {users.map((user) => (
                   <tr key={user.email}>
                     <td>{user.name}</td>
                     <td>{user.email}</td>
@@ -952,6 +1124,27 @@ function App() {
   }
 
   function renderActivePage() {
+    if (loading) {
+      return (
+        <section className="page-stack">
+          <section className="panel"><p>Loading pipeline data...</p></section>
+        </section>
+      );
+    }
+    if (loadError) {
+      return (
+        <section className="page-stack">
+          <section className="panel"><p>Could not load data: {loadError}</p></section>
+        </section>
+      );
+    }
+    if (!selectedRow) {
+      return (
+        <section className="page-stack">
+          <section className="panel"><p>No positions yet. Import a position to get started.</p></section>
+        </section>
+      );
+    }
     switch (activePage) {
       case "dashboard":
         return renderDashboard();
@@ -976,6 +1169,18 @@ function App() {
       default:
         return renderDashboard();
     }
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="app-shell login-shell">
+        <div className="panel login-panel"><p>Loading...</p></div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return <LoginScreen onLogin={setCurrentUser} />;
   }
 
   return (
@@ -1005,6 +1210,23 @@ function App() {
         </nav>
 
         <div className="sidebar-footer">
+          <div className="user-chip">
+            <div className="avatar">
+              {currentUser.name
+                .split(" ")
+                .map((part) => part[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase()}
+            </div>
+            <div>
+              <strong>{currentUser.name}</strong>
+              <p>{currentUser.role}</p>
+            </div>
+          </div>
+          <button type="button" className="ghost-button" onClick={handleLogout}>
+            Sign Out
+          </button>
           <div className="sidebar-note">
             <span className="section-kicker">Core Pipeline</span>
             <p>Import → Position Pool → Assign → Builder Tagging → Similarity → Review → Approved KB</p>
@@ -1019,6 +1241,7 @@ function App() {
             <h2>{NAV_ITEMS.find((item) => item.id === activePage)?.label}</h2>
           </div>
           <div className="header-actions">
+            {actionError ? <span className="pill danger">{actionError}</span> : null}
             <span className="pill neutral">Desktop-first MVP</span>
           </div>
         </header>

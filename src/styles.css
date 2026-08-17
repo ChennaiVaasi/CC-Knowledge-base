@@ -847,3 +847,44 @@ th {
     flex-direction: column;
   }
 }
+
+.login-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.login-panel {
+  width: min(400px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 32px;
+}
+
+.login-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.login-panel input {
+  padding: 10px 12px;
+  border: 1px solid #d3ddec;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.login-error {
+  color: #b3261e;
+  font-size: 13px;
+}
+
+.import-notice {
+  font-size: 13px;
+  color: #34506e;
+  padding-top: 8px;
+}

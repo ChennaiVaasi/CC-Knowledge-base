@@ -4,13 +4,19 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -k \"node server/index.js\" \"vite\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "stockfish": "node ./node_modules/stockfish/bin/stockfish-18-lite-single.js"
   },
   "dependencies": {
+    "bcryptjs": "^3.0.3",
     "chess.js": "^1.4.0",
+    "concurrently": "^9.2.4",
+    "connect-pg-simple": "^10.0.0",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "pg": "^8.23.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "stockfish": "^18.0.8"
