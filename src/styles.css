@@ -771,6 +771,15 @@ th {
   flex: 1 1 160px;
 }
 
+.empty-state {
+  padding: 3rem 1.5rem;
+  border: 1px dashed var(--border);
+  border-radius: 18px;
+  color: var(--muted);
+  text-align: center;
+  background: var(--panel);
+}
+
 @media (max-width: 1320px) {
   .three-up,
   .two-up,
