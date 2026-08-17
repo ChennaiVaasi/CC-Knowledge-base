@@ -675,12 +675,24 @@ app.get("/api/approved", async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Serve built frontend in production
+import { fileURLToPath } from "node:url";
+import path from "node:path";
+import fs from "node:fs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distDir = path.resolve(__dirname, "../dist");
+if (fs.existsSync(distDir)) {
+  app.use(express.static(distDir));
+  app.get("/{*splat}", (_req, res) => res.sendFile(path.join(distDir, "index.html")));
+}
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ error: "Internal server error" });
 });
 
-const PORT = process.env.API_PORT || 3001;
+const PORT = process.env.PORT || process.env.API_PORT || 3001;
 initDb()
   .then(() => {
     app.listen(PORT, "0.0.0.0", () => console.log(`API server listening on ${PORT}`));
