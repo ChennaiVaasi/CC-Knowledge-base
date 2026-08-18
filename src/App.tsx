@@ -1193,7 +1193,7 @@ function App() {
   }
 
   function renderSimilarityPage() {
-    if (SIMILARITY_RESULTS.length === 0) {
+    if (similarityResults.length === 0) {
       return <EmptyState message="No similarity results are available." />;
     }
     return (
@@ -1767,7 +1767,7 @@ function App() {
                     </td>
                   </tr>
                 ))}
-                {USERS.length === 0 && (
+                {users.length === 0 && (
                   <tr><td colSpan={5}>No users have been added.</td></tr>
                 )}
               </tbody>
