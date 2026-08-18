@@ -1401,7 +1401,7 @@ function App() {
                 <small>Last updated {item.updated}</small>
               </article>
             ))}
-            {APPROVED_CONTENT.length === 0 && <EmptyState message="No approved content yet." />}
+            {approvedContent.length === 0 && <EmptyState message="No approved content yet." />}
           </div>
         </section>
       </section>
@@ -1619,7 +1619,7 @@ function App() {
               ))}
             </article>
           ))}
-          {TAXONOMY.length === 0 && <EmptyState message="No taxonomy entries yet." />}
+          {taxonomy.length === 0 && <EmptyState message="No taxonomy entries yet." />}
         </div>
       </section>
     );
