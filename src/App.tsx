@@ -1795,20 +1795,15 @@ function App() {
     }
     if (activePage === "admin") return renderAdminPage();
 
-    if (!selectedRow) {
-      return (
-        <section className="page-stack">
-          <section className="panel"><p>No positions yet. Import a position to get started.</p></section>
-        </section>
-      );
-    }
     switch (activePage) {
-      case "dashboard":
-        return renderDashboard();
       case "import":
         return renderImportPage();
       case "pool":
         return renderPoolPage();
+      case "taxonomy":
+        return renderTaxonomyPage();
+      case "dashboard":
+        return renderDashboard();
       case "assignments":
         return renderAssignmentsPage();
       case "builder":
@@ -1819,8 +1814,6 @@ function App() {
         return renderReviewPage();
       case "approved":
         return renderApprovedPage();
-      case "taxonomy":
-        return renderTaxonomyPage();
       default:
         return renderDashboard();
     }
