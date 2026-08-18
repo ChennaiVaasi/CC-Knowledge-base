@@ -233,6 +233,10 @@ function LoginScreen({ onLogin }: { onLogin: (user: UserRow) => void }) {
   );
 }
 
+function EmptyState({ message }: { message: string }) {
+  return <div className="empty-state">{message}</div>;
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState<UserRow | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
