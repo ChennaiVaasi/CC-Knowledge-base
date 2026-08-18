@@ -141,6 +141,44 @@ function MetricCard({ label, value, delta }: { label: string; value: string; del
   );
 }
 
+function SelectOrAddField({
+  label,
+  options,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  options: string[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+}) {
+  const usesCustomValue = !options.includes(value);
+
+  return (
+    <label>
+      {label}
+      <select
+        aria-label={`${label} options`}
+        value={usesCustomValue ? "__custom__" : value}
+        onChange={(event) => onChange(event.target.value === "__custom__" ? "" : event.target.value)}
+      >
+        {options.map((option) => <option key={option} value={option}>{option}</option>)}
+        <option value="__custom__">+ Add new {label.toLowerCase()}</option>
+      </select>
+      {usesCustomValue ? (
+        <input
+          aria-label={`New ${label}`}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+        />
+      ) : null}
+    </label>
+  );
+}
+
 function LoginScreen({ onLogin }: { onLogin: (user: UserRow) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -240,6 +278,7 @@ function App() {
   const [builderConcept, setBuilderConcept] = useState("");
   const [builderDomain, setBuilderDomain] = useState("");
   const [builderTopic, setBuilderTopic] = useState("");
+  const [builderRating, setBuilderRating] = useState("");
 
   // Taxonomy form state
   const [showTaxonomyForm, setShowTaxonomyForm] = useState(false);
@@ -333,6 +372,7 @@ function App() {
     setBuilderLearningOutcome(selectedRow.learningOutcome ?? "");
     setBuilderSolves(selectedRow.solves ?? "");
     setBuilderConcept(selectedRow.concept ?? "");
+    setBuilderRating(selectedRow.rating ?? "");
     // Infer domain and topic from broadTags or taxonomy lookup
     const tagDomain = selectedRow.broadTags[0] ?? "";
     const tagTopic = selectedRow.broadTags[1] ?? "";
@@ -1029,6 +1069,8 @@ function App() {
                   learningOutcome: builderLearningOutcome,
                   solves: builderSolves,
                   concept: builderConcept,
+                  broadTags: [builderDomain, builderTopic].filter(Boolean),
+                  rating: builderRating,
                 })
               }
             >
@@ -1075,70 +1117,45 @@ function App() {
               </div>
             </div>
             <div className="form-grid">
-              <label>
-                Domain
-                <select
-                  value={builderDomain}
-                  onChange={(event) => {
-                    const d = event.target.value;
+              <SelectOrAddField
+                label="Domain"
+                options={taxonomy.map((node) => node.domain)}
+                value={builderDomain}
+                placeholder="Enter a new domain"
+                onChange={(d) => {
                     setBuilderDomain(d);
                     const domainNode = taxonomy.find((n) => n.domain === d);
                     const firstTopic = domainNode?.topics[0]?.name ?? "";
                     setBuilderTopic(firstTopic);
                     setBuilderConcept(domainNode?.topics[0]?.concepts[0] ?? "");
-                  }}
-                >
-                  {taxonomy.map((n) => <option key={n.domain}>{n.domain}</option>)}
-                  {builderDomain && !taxonomy.some((n) => n.domain === builderDomain) ? (
-                    <option>{builderDomain}</option>
-                  ) : null}
-                </select>
-              </label>
-              <label>
-                Major Topic
-                <select
-                  value={builderTopic}
-                  onChange={(event) => {
-                    const t = event.target.value;
+                }}
+              />
+              <SelectOrAddField
+                label="Major Topic"
+                options={(taxonomy.find((node) => node.domain === builderDomain)?.topics ?? []).map((topic) => topic.name)}
+                value={builderTopic}
+                placeholder="Enter a new major topic"
+                onChange={(t) => {
                     setBuilderTopic(t);
                     const domainNode = taxonomy.find((n) => n.domain === builderDomain);
                     const topicObj = domainNode?.topics.find((tp) => tp.name === t);
                     setBuilderConcept(topicObj?.concepts[0] ?? "");
-                  }}
-                >
-                  {(taxonomy.find((n) => n.domain === builderDomain)?.topics ?? []).map((t) => (
-                    <option key={t.name}>{t.name}</option>
-                  ))}
-                  {builderTopic &&
-                    !taxonomy.find((n) => n.domain === builderDomain)?.topics.some((t) => t.name === builderTopic) ? (
-                    <option>{builderTopic}</option>
-                  ) : null}
-                </select>
-              </label>
-              <label>
-                Concept
-                <select
-                  value={builderConcept}
-                  onChange={(event) => setBuilderConcept(event.target.value)}
-                  onBlur={() => updatePosition(selectedRow.id, { concept: builderConcept })}
-                >
-                  {(taxonomy.find((n) => n.domain === builderDomain)?.topics.find((t) => t.name === builderTopic)?.concepts ?? []).map((c) => (
-                    <option key={c}>{c}</option>
-                  ))}
-                  {builderConcept &&
-                    !taxonomy.find((n) => n.domain === builderDomain)?.topics.find((t) => t.name === builderTopic)?.concepts.includes(builderConcept) ? (
-                    <option>{builderConcept}</option>
-                  ) : null}
-                </select>
-              </label>
-              <label>
-                Rating Band
-                <select defaultValue="600 - 800">
-                  <option>600 - 800</option>
-                  <option>800 - 1000</option>
-                  <option>1000 - 1200</option>
-                </select>
-              </label>
+                }}
+              />
+              <SelectOrAddField
+                label="Concept"
+                options={taxonomy.find((node) => node.domain === builderDomain)?.topics.find((topic) => topic.name === builderTopic)?.concepts ?? []}
+                value={builderConcept}
+                placeholder="Enter a new concept"
+                onChange={setBuilderConcept}
+              />
+              <SelectOrAddField
+                label="Rating Band"
+                options={["600 - 800", "800 - 1000", "1000 - 1200"]}
+                value={builderRating}
+                placeholder="Enter a new rating band"
+                onChange={setBuilderRating}
+              />
               <label className="span-2">
                 Knowledge Types
                 <div className="check-grid">
