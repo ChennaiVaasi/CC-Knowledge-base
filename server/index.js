@@ -97,74 +97,6 @@ CREATE TABLE IF NOT EXISTS approved_content (
 );
 `;
 
-const SEED_POSITIONS = [
-  {
-    id: "SR-3821",
-    title: "Carlsen vs Anand",
-    subtitle: "Wijk aan Zee 2013, Move 24",
-    fen: "2r2rk1/pp3ppp/2p5/3p4/3P4/2P2N2/PP3PPP/2R2RK1 w - - 0 24",
-    broadTags: ["Tactics", "Defender Manipulation"],
-    source: "CC games.pgn",
-    rating: "600 - 800",
-    status: "Submitted",
-    builder: "Arun",
-    priority: "Normal",
-    learningOutcome:
-      "Recognize when a defender of an attacked piece can be removed or distracted.",
-    solves:
-      "Students often stop calculating when a defended piece appears safe and miss ways to eliminate the defender.",
-    similarity: 92,
-    concept: "Removing the Defender",
-  },
-  {
-    id: "AS-2318",
-    title: "Kasparov vs Karpov",
-    subtitle: "Moscow 1986, Move 17",
-    fen: "r2q1rk1/pp2bppp/2n1pn2/2bp4/3P4/2NBPN2/PPQ2PPP/R1B2RK1 w - - 0 10",
-    broadTags: ["Strategy", "Pawn Structure"],
-    source: "CC strategic batch",
-    rating: "800 - 1000",
-    status: "New",
-    builder: "Unassigned",
-    priority: "High",
-    learningOutcome: "Detect when structure dictates the right piece regrouping plan.",
-    solves: "Players know motifs but fail to convert them into strategic plans.",
-    similarity: 44,
-    concept: "Pawn Lever Timing",
-  },
-  {
-    id: "AS-2404",
-    title: "Capablanca rook ending",
-    subtitle: "Generated endgame cluster",
-    fen: "8/5pk1/6p1/8/3R2P1/5P2/5K2/8 w - - 0 1",
-    broadTags: ["Endgames", "Rook Endings"],
-    source: "CC endgame generator",
-    rating: "1000 - 1200",
-    status: "Assigned",
-    builder: "Meena",
-    priority: "Normal",
-    learningOutcome: "Spot when king activity outweighs pawn count in rook endings.",
-    solves: "Learners overvalue material and underplay king activation.",
-    similarity: 37,
-    concept: "Active King in Rook Endings",
-  },
-  {
-    id: "AS-2497",
-    title: "Nakamura vs Radjabov",
-    subtitle: "Candidate move extraction",
-    fen: "r4rk1/pp3ppp/2p2n2/3p4/3P1B2/2N2N2/PP3PPP/2R2RK1 w - - 0 19",
-    broadTags: ["Calculation", "Pins"],
-    source: "CC games.pgn",
-    rating: "600 - 800",
-    status: "In Progress",
-    builder: "Vishu",
-    priority: "High",
-    learningOutcome: "Generate forcing candidate moves before settling on a quiet move.",
-    solves: "Students choose the first playable move instead of comparing forcing options.",
-    similarity: 58,
-    concept: "Forcing Candidate Moves",
-  },
-];
 
 const SEED_USERS = [
   { name: "Vishu KA", email: "vishu@circlechess.com", role: "Knowledge Architect", status: "Active", joined: "May 10, 2024" },
@@ -175,98 +107,6 @@ const SEED_USERS = [
   { name: "Prakash Admin", email: "prakash.admin@circlechess.com", role: "Admin", status: "Active", joined: "May 08, 2024" },
 ];
 
-const SEED_TAXONOMY = [
-  {
-    domain: "Tactics",
-    topics: [
-      { name: "Defender Manipulation", concepts: ["Removing the Defender", "Deflection", "Overloaded Defender"] },
-      { name: "Pins", concepts: ["Absolute Pin", "Relative Pin", "Pin Breaks"] },
-    ],
-  },
-  {
-    domain: "Calculation",
-    topics: [{ name: "Candidate Moves", concepts: ["Forcing Candidate Moves", "Checks First Scan"] }],
-  },
-  {
-    domain: "Endgames",
-    topics: [{ name: "Rook Endings", concepts: ["Active King in Rook Endings", "Cutoff King", "Lucena Entry"] }],
-  },
-];
-
-const SEED_SIMILARITY = [
-  {
-    id: "KN-144",
-    title: "Removing the Defender",
-    domain: "Tactics",
-    topic: "Defender Manipulation",
-    rating: "600 - 800",
-    positionMatch: 94,
-    conceptMatch: "Exact",
-    learningOutcomeMatch: 86,
-    studentProblemMatch: 91,
-    solutionSimilarity: 73,
-    label: "94% Position Match",
-    fen: "2r2rk1/pp3ppp/2p5/3p4/3P4/2P2N2/PP3PPP/2R2RK1 w - - 0 24",
-  },
-  {
-    id: "KN-211",
-    title: "Removing the Defender",
-    domain: "Tactics",
-    topic: "Defender Manipulation",
-    rating: "800 - 1000",
-    positionMatch: 72,
-    conceptMatch: "Same Concept",
-    learningOutcomeMatch: 78,
-    studentProblemMatch: 82,
-    solutionSimilarity: 69,
-    label: "72% Position Match",
-    fen: "3r2k1/pp3ppp/2p5/3p4/3P4/2P2N2/PP3PPP/2R2RK1 w - - 0 24",
-  },
-  {
-    id: "KN-319",
-    title: "Same Student Problem",
-    domain: "Tactics",
-    topic: "Defender Manipulation",
-    rating: "400 - 600",
-    positionMatch: 48,
-    conceptMatch: "Related",
-    learningOutcomeMatch: 65,
-    studentProblemMatch: 88,
-    solutionSimilarity: 42,
-    label: "Same Student Problem",
-    fen: "6k1/1p3ppp/p1p5/3p4/3P4/2P2N2/PP3PPP/2R2RK1 w - - 0 24",
-  },
-];
-
-const SEED_APPROVED = [
-  {
-    concept: "Removing the Defender",
-    domain: "Tactics",
-    topic: "Defender Manipulation",
-    types: ["Recognition", "Normal Action", "Common Mistake"],
-    positions: 18,
-    updated: "Aug 16, 2026",
-    coverage: "Strong in 600 - 1000, weak in 1000 - 1200",
-  },
-  {
-    concept: "Loose Piece Punishment",
-    domain: "Tactics",
-    topic: "Targets",
-    types: ["Recognition", "Importance"],
-    positions: 14,
-    updated: "Aug 15, 2026",
-    coverage: "Strong in 400 - 800",
-  },
-  {
-    concept: "Active King in Rook Endings",
-    domain: "Endgames",
-    topic: "Rook Endings",
-    types: ["Definition", "Normal Action"],
-    positions: 9,
-    updated: "Aug 14, 2026",
-    coverage: "Missing under 600",
-  },
-];
 
 function rowToPosition(row) {
   return {
@@ -289,16 +129,6 @@ function rowToPosition(row) {
 
 async function initDb() {
   await pool.query(SCHEMA_SQL);
-  const { rows } = await pool.query("SELECT COUNT(*)::int AS n FROM positions");
-  if (rows[0].n === 0) {
-    for (const p of SEED_POSITIONS) {
-      await pool.query(
-        `INSERT INTO positions (id, title, subtitle, fen, broad_tags, source, rating, status, builder, priority, learning_outcome, solves, similarity, concept)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT (id) DO NOTHING`,
-        [p.id, p.title, p.subtitle, p.fen, JSON.stringify(p.broadTags), p.source, p.rating, p.status, p.builder, p.priority, p.learningOutcome, p.solves, p.similarity, p.concept],
-      );
-    }
-  }
   const users = await pool.query("SELECT COUNT(*)::int AS n FROM users");
   if (users.rows[0].n === 0) {
     for (const u of SEED_USERS) {
@@ -320,33 +150,6 @@ async function initDb() {
       console.log(`  ${row.email}  ->  ${password}`);
     }
     console.log("=== End of initial credentials ===");
-  }
-  const tax = await pool.query("SELECT COUNT(*)::int AS n FROM taxonomy_domains");
-  if (tax.rows[0].n === 0) {
-    for (const t of SEED_TAXONOMY) {
-      await pool.query(
-        "INSERT INTO taxonomy_domains (domain, topics) VALUES ($1,$2) ON CONFLICT (domain) DO NOTHING",
-        [t.domain, JSON.stringify(t.topics)],
-      );
-    }
-  }
-  const sim = await pool.query("SELECT COUNT(*)::int AS n FROM similarity_results");
-  if (sim.rows[0].n === 0) {
-    for (const s of SEED_SIMILARITY) {
-      await pool.query(
-        "INSERT INTO similarity_results (id, data) VALUES ($1,$2) ON CONFLICT (id) DO NOTHING",
-        [s.id, JSON.stringify(s)],
-      );
-    }
-  }
-  const appr = await pool.query("SELECT COUNT(*)::int AS n FROM approved_content");
-  if (appr.rows[0].n === 0) {
-    for (const a of SEED_APPROVED) {
-      await pool.query(
-        "INSERT INTO approved_content (concept, data) VALUES ($1,$2) ON CONFLICT (concept) DO NOTHING",
-        [a.concept, JSON.stringify(a)],
-      );
-    }
   }
 }
 
