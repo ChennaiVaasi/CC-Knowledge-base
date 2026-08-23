@@ -49,7 +49,9 @@ const STATUS_META: Record<PositionStatus, { tone: StatusTone; label: string }> =
   "In Progress": { tone: "info", label: "In Progress" },
   Submitted: { tone: "warning", label: "Submitted" },
   "Changes Requested": { tone: "danger", label: "Changes Requested" },
+  "Peer Review": { tone: "warning", label: "Peer Review" },
   Approved: { tone: "success", label: "Approved" },
+  Published: { tone: "success", label: "Published" },
 };
 
 const PIECE_IMAGES: Record<string, string> = {
@@ -339,7 +341,7 @@ function App() {
         setTaxonomy(taxonomyRows);
         setSimilarityResults(similarity);
         setApprovedContent(approved);
-        setBuilderNames(builders.map((name) => name.split(" ")[0]));
+        setBuilderNames(builders);
         setSelectedRowId((current) => current || positions[0]?.id || "");
         setLoadError(null);
       } catch (err) {
@@ -397,7 +399,8 @@ function App() {
 
   async function updatePosition(id: string, data: Partial<PoolRow>) {
     try {
-      const updated = await api.updatePosition(id, data);
+      const current = poolRows.find((row) => row.id === id);
+      const updated = await api.updatePosition(id, { ...data, expectedRevision: current?.revision });
       setPoolRows((rows) => rows.map((row) => (row.id === id ? updated : row)));
       setActionError(null);
     } catch (err) {
@@ -407,13 +410,23 @@ function App() {
 
   async function assignBuilder(id: string, builder: string) {
     const row = poolRows.find((item) => item.id === id);
-    const data: Partial<PoolRow> = { builder };
-    if (builder === "Unassigned") {
-      data.status = "New";
-    } else if (row && (row.status === "New" || row.status === "Assigned")) {
-      data.status = "Assigned";
-    }
-    await updatePosition(id, data);
+    if (!row) return;
+    try {
+      const updated = await api.actOnPosition(id, { action: builder === "Unassigned" ? "unassign" : "assign", builder, expectedRevision: row.revision });
+      setPoolRows((rows) => rows.map((item) => item.id === id ? updated : item));
+      setActionError(null);
+    } catch (err) { setActionError(err instanceof Error ? err.message : "Assignment failed"); }
+  }
+
+  async function workflowAction(id: string, action: string, comment?: string) {
+    const row = poolRows.find((item) => item.id === id);
+    if (!row) return;
+    try {
+      const updated = await api.actOnPosition(id, { action, comment, expectedRevision: row.revision });
+      setPoolRows((rows) => rows.map((item) => item.id === id ? updated : item));
+      if (action === "publish") setApprovedContent(await api.getApproved());
+      setActionError(null);
+    } catch (err) { setActionError(err instanceof Error ? err.message : "Workflow action failed"); }
   }
 
   async function handleAddUser(event: React.FormEvent) {
@@ -505,6 +518,7 @@ function App() {
         broadTags: [importDomain],
         source: `${importSource} import`,
         rating: importRating,
+        rawPgn: pgnText,
       });
       setPoolRows((rows) => [...rows, created]);
       setSelectedRowId(created.id);
@@ -1067,16 +1081,24 @@ function App() {
             <span className="pill info">Autosaved 2 min ago</span>
             <button
               type="button"
-              onClick={() =>
-                updatePosition(selectedRow.id, {
-                  status: "Submitted",
+              onClick={async () => {
+                await updatePosition(selectedRow.id, {
                   learningOutcome: builderLearningOutcome,
                   solves: builderSolves,
                   concept: builderConcept,
                   broadTags: [builderDomain, builderTopic].filter(Boolean),
-                  rating: builderRating,
-                })
-              }
+                });
+                const refreshed = await api.getPositions();
+                setPoolRows(refreshed);
+                const latest = refreshed.find((row) => row.id === selectedRow.id);
+                if (latest) {
+                  try {
+                    const submitted = await api.actOnPosition(latest.id, { action: "submit", expectedRevision: latest.revision });
+                    setPoolRows((rows) => rows.map((row) => row.id === submitted.id ? submitted : row));
+                    setActionError(null);
+                  } catch (err) { setActionError(err instanceof Error ? err.message : "Submission failed"); }
+                }
+              }}
             >
               Submit
             </button>
@@ -1338,29 +1360,34 @@ function App() {
             </dl>
             <label>
               Reviewer Notes
-              <textarea rows={8} placeholder="Add review notes here..." />
+              <textarea id="review-notes" rows={8} placeholder="Add review notes here..." />
             </label>
             <div className="action-row full-width">
               <button
                 type="button"
                 className="warning-button"
-                onClick={() => updatePosition(selectedRow.id, { status: "Changes Requested" })}
+                onClick={() => workflowAction(selectedRow.id, "request_changes", (document.getElementById("review-notes") as HTMLTextAreaElement)?.value)}
               >
                 Request Changes
               </button>
               <button
                 type="button"
                 className="danger-button"
-                onClick={() => updatePosition(selectedRow.id, { status: "New", builder: "Unassigned" })}
+                onClick={() => workflowAction(selectedRow.id, "request_changes", (document.getElementById("review-notes") as HTMLTextAreaElement)?.value)}
               >
                 Reject
               </button>
               <button
                 type="button"
                 className="success-button"
-                onClick={() => updatePosition(selectedRow.id, { status: "Approved" })}
+                onClick={() => workflowAction(
+                  selectedRow.id,
+                  selectedRow.status === "Approved" || selectedRow.status === "Published"
+                    ? "publish"
+                    : selectedRow.status === "Peer Review" ? "peer_approve" : "architect_approve",
+                )}
               >
-                Approve
+                {selectedRow.status === "Approved" || selectedRow.status === "Published" ? "Save to Library" : "Approve"}
               </button>
             </div>
           </section>

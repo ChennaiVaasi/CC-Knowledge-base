@@ -4,7 +4,9 @@ export type PositionStatus =
   | "In Progress"
   | "Submitted"
   | "Changes Requested"
-  | "Approved";
+  | "Peer Review"
+  | "Approved"
+  | "Published";
 
 export type PoolRow = {
   id: string;
@@ -21,6 +23,9 @@ export type PoolRow = {
   solves: string;
   similarity: number;
   concept: string;
+  rawPgn: string;
+  revision: number;
+  updatedAt: string;
 };
 
 export type SimilarityCard = {
@@ -92,9 +97,14 @@ export const api = {
   getPositions: () => request<PoolRow[]>("/api/positions"),
   createPosition: (data: Partial<PoolRow> & { title: string; fen: string }) =>
     request<PoolRow>("/api/positions", { method: "POST", body: JSON.stringify(data) }),
-  updatePosition: (id: string, data: Partial<PoolRow>) =>
+  updatePosition: (id: string, data: Partial<PoolRow> & { expectedRevision?: number }) =>
     request<PoolRow>(`/api/positions/${encodeURIComponent(id)}`, {
       method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  actOnPosition: (id: string, data: { action: string; expectedRevision: number; builder?: string; comment?: string }) =>
+    request<PoolRow>(`/api/positions/${encodeURIComponent(id)}/actions`, {
+      method: "POST",
       body: JSON.stringify(data),
     }),
   getUsers: () => request<UserRow[]>("/api/users"),

@@ -3,6 +3,8 @@ import pg from "pg";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
+import { Chess } from "chess.js";
+import { ACTIONS, STATUSES, snapshotPosition, submissionMissing, transitionFor } from "./workflow.js";
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -75,6 +77,40 @@ CREATE TABLE IF NOT EXISTS positions (
   concept TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS raw_pgn TEXT NOT NULL DEFAULT '';
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS approved_revision_id BIGINT;
+CREATE TABLE IF NOT EXISTS content_revisions (
+  id BIGSERIAL PRIMARY KEY,
+  position_id TEXT NOT NULL REFERENCES positions(id) ON DELETE RESTRICT,
+  revision INTEGER NOT NULL,
+  snapshot JSONB NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE(position_id, revision)
+);
+CREATE TABLE IF NOT EXISTS content_reviews (
+  id BIGSERIAL PRIMARY KEY,
+  position_id TEXT NOT NULL REFERENCES positions(id) ON DELETE RESTRICT,
+  revision_id BIGINT NOT NULL REFERENCES content_revisions(id) ON DELETE RESTRICT,
+  stage TEXT NOT NULL CHECK (stage IN ('Architect', 'Peer')),
+  status TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'Approved', 'Changes Requested')),
+  comment TEXT NOT NULL DEFAULT '',
+  reviewer_email TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS one_open_review_per_position ON content_reviews(position_id) WHERE status = 'Open';
+CREATE TABLE IF NOT EXISTS library_items (
+  position_id TEXT PRIMARY KEY REFERENCES positions(id) ON DELETE RESTRICT,
+  revision_id BIGINT NOT NULL UNIQUE REFERENCES content_revisions(id) ON DELETE RESTRICT,
+  snapshot JSONB NOT NULL,
+  approved_by TEXT NOT NULL,
+  approved_at TIMESTAMPTZ NOT NULL,
+  published_by TEXT NOT NULL,
+  published_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS users (
   email TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -124,6 +160,9 @@ function rowToPosition(row) {
     solves: row.solves,
     similarity: row.similarity,
     concept: row.concept,
+    rawPgn: row.raw_pgn,
+    revision: row.revision,
+    updatedAt: row.updated_at,
   };
 }
 
@@ -219,28 +258,43 @@ app.get("/api/positions", async (_req, res, next) => {
   } catch (err) { next(err); }
 });
 
-const VALID_STATUSES = ["New", "Assigned", "In Progress", "Submitted", "Changes Requested", "Approved"];
+const VALID_STATUSES = Object.values(STATUSES);
 const VALID_PRIORITIES = ["Low", "Normal", "High"];
 
 app.post("/api/positions", requireRole(ADMIN, ARCHITECT), async (req, res, next) => {
   try {
     const b = req.body ?? {};
-    if (!b.title || !b.fen) {
+    if (!b.title || (!String(b.fen ?? "").trim() && !String(b.rawPgn ?? "").trim())) {
       return res.status(400).json({ error: "title and fen are required" });
+    }
+    let fen = String(b.fen ?? "").trim();
+    const rawPgn = String(b.rawPgn ?? "");
+    try {
+      if (rawPgn) {
+        const chess = new Chess();
+        chess.loadPgn(rawPgn);
+        if (!fen) fen = chess.fen();
+        else if (new Chess(fen).fen() !== chess.fen()) {
+          return res.status(400).json({ code: "CONTENT_SAVE_FAILED", error: "FEN does not match the final PGN position" });
+        }
+      }
+      new Chess(fen);
+    } catch {
+      return res.status(400).json({ code: "UPLOAD_PARSE_FAILED", error: "The PGN or full FEN is invalid" });
     }
     const id = b.id || `AS-${Math.floor(1000 + Math.random() * 9000)}`;
     const status = VALID_STATUSES.includes(b.status) ? b.status : "New";
     const priority = VALID_PRIORITIES.includes(b.priority) ? b.priority : "Normal";
     const { rows } = await pool.query(
-      `INSERT INTO positions (id, title, subtitle, fen, broad_tags, source, rating, status, builder, priority, learning_outcome, solves, similarity, concept)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      `INSERT INTO positions (id, title, subtitle, fen, broad_tags, source, rating, status, builder, priority, learning_outcome, solves, similarity, concept, raw_pgn)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [
-        id, b.title, b.subtitle ?? "", b.fen,
+        id, b.title, b.subtitle ?? "", fen,
         JSON.stringify(Array.isArray(b.broadTags) ? b.broadTags : []),
         b.source ?? "Manual import", b.rating ?? "600 - 800", status,
         b.builder ?? "Unassigned", priority,
         b.learningOutcome ?? "", b.solves ?? "",
-        Number.isFinite(b.similarity) ? b.similarity : 0, b.concept ?? "",
+        Number.isFinite(b.similarity) ? b.similarity : 0, b.concept ?? "", rawPgn,
       ],
     );
     res.status(201).json(rowToPosition(rows[0]));
@@ -250,9 +304,7 @@ app.post("/api/positions", requireRole(ADMIN, ARCHITECT), async (req, res, next)
   }
 });
 
-const BUILDER_FIELDS = new Set(["learningOutcome", "solves", "concept", "status"]);
-const BUILDER_STATUSES = new Set(["In Progress", "Submitted"]);
-const REVIEW_STATUSES = new Set(["New", "Approved", "Changes Requested"]);
+const BUILDER_FIELDS = new Set(["learningOutcome", "solves", "concept", "broadTags", "expectedRevision"]);
 
 app.patch("/api/positions/:id", async (req, res, next) => {
   try {
@@ -265,9 +317,6 @@ app.patch("/api/positions/:id", async (req, res, next) => {
       if (keys.some((key) => !BUILDER_FIELDS.has(key))) {
         return res.status(403).json({ error: "Builders can only edit instructional fields and progress status" });
       }
-      if (body.status !== undefined && !BUILDER_STATUSES.has(body.status)) {
-        return res.status(403).json({ error: "Builders can only set status to In Progress or Submitted" });
-      }
       const existing = await pool.query("SELECT builder FROM positions WHERE id = $1", [req.params.id]);
       if (existing.rows.length === 0) return res.status(404).json({ error: "position not found" });
       const firstName = user.name.split(" ")[0];
@@ -275,29 +324,19 @@ app.patch("/api/positions/:id", async (req, res, next) => {
         return res.status(403).json({ error: "You can only edit positions assigned to you" });
       }
     } else if (user.role === REVIEWER) {
-      // Reviewers may only change review status and leave review outcomes.
-      const keys = Object.keys(body);
-      if (keys.some((key) => !["status", "builder"].includes(key))) {
-        return res.status(403).json({ error: "Reviewers can only update review status" });
-      }
-      if (body.status !== undefined && !REVIEW_STATUSES.has(body.status)) {
-        return res.status(403).json({ error: "Reviewers can only approve, reject, or request changes" });
-      }
+      return res.status(403).json({ code: "PERMISSION_DENIED", error: "Peer reviewers cannot edit submitted content" });
     } else if (user.role !== ADMIN && user.role !== ARCHITECT) {
       return res.status(403).json({ error: "Insufficient permissions" });
     }
     const allowed = {
       title: "title", subtitle: "subtitle", fen: "fen", source: "source",
-      rating: "rating", status: "status", builder: "builder", priority: "priority",
+      rating: "rating", builder: "builder", priority: "priority", rawPgn: "raw_pgn",
       learningOutcome: "learning_outcome", solves: "solves", concept: "concept",
     };
     const sets = [];
     const values = [];
     for (const [key, col] of Object.entries(allowed)) {
       if (req.body?.[key] !== undefined) {
-        if (key === "status" && !VALID_STATUSES.includes(req.body[key])) {
-          return res.status(400).json({ error: "invalid status" });
-        }
         if (key === "priority" && !VALID_PRIORITIES.includes(req.body[key])) {
           return res.status(400).json({ error: "invalid priority" });
         }
@@ -306,18 +345,110 @@ app.patch("/api/positions/:id", async (req, res, next) => {
       }
     }
     if (req.body?.broadTags !== undefined) {
+      if (!Array.isArray(req.body.broadTags)) return res.status(400).json({ error: "broadTags must be an array" });
       values.push(JSON.stringify(req.body.broadTags));
       sets.push(`broad_tags = $${values.length}`);
     }
     if (sets.length === 0) return res.status(400).json({ error: "no valid fields to update" });
     values.push(req.params.id);
+    let where = `id = $${values.length}`;
+    if (body.expectedRevision !== undefined) {
+      values.push(body.expectedRevision);
+      where += ` AND revision = $${values.length}`;
+    }
     const { rows } = await pool.query(
-      `UPDATE positions SET ${sets.join(", ")} WHERE id = $${values.length} RETURNING *`,
-      values,
+      `UPDATE positions SET ${sets.join(", ")}, revision = revision + 1, updated_at = now() WHERE ${where} RETURNING *`, values,
     );
+    if (rows.length === 0 && body.expectedRevision !== undefined) {
+      const exists = await pool.query("SELECT 1 FROM positions WHERE id = $1", [req.params.id]);
+      if (exists.rowCount) return res.status(409).json({ code: "STALE_REVISION", error: "This content was changed in another tab. Refresh before saving." });
+    }
     if (rows.length === 0) return res.status(404).json({ error: "position not found" });
     res.json(rowToPosition(rows[0]));
   } catch (err) { next(err); }
+});
+
+app.post("/api/positions/:id/actions", async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const action = req.body?.action;
+    const current = await client.query("SELECT * FROM positions WHERE id = $1 FOR UPDATE", [req.params.id]);
+    if (!current.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ error: "position not found" }); }
+    const row = current.rows[0];
+    if (req.body?.expectedRevision !== undefined && Number(req.body.expectedRevision) !== row.revision) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ code: "STALE_REVISION", error: "This content changed after you opened it. Refresh and retry." });
+    }
+    const rule = transitionFor(row.status, action, req.session.user.role);
+    if (!rule.ok) { await client.query("ROLLBACK"); return res.status(rule.code === "PERMISSION_DENIED" ? 403 : 409).json(rule); }
+
+    if ([ACTIONS.SAVE, ACTIONS.SUBMIT].includes(action)) {
+      const assigned = row.builder === req.session.user.name || row.builder === req.session.user.name.split(" ")[0];
+      if (!assigned) { await client.query("ROLLBACK"); return res.status(403).json({ code: "PERMISSION_DENIED", error: "This position is assigned to another builder" }); }
+    }
+    if (action === ACTIONS.ASSIGN) {
+      const builder = String(req.body.builder ?? "").trim();
+      const active = await client.query("SELECT name FROM users WHERE name = $1 AND role = $2 AND status = 'Active'", [builder, BUILDER]);
+      if (!active.rowCount) { await client.query("ROLLBACK"); return res.status(400).json({ error: "Select an active builder" }); }
+      row.builder = builder;
+    } else if (action === ACTIONS.UNASSIGN) {
+      row.builder = "Unassigned";
+    }
+    if (action === ACTIONS.SUBMIT) {
+      const missing = submissionMissing(row);
+      if (missing.length) { await client.query("ROLLBACK"); return res.status(400).json({ code: "SUBMISSION_VALIDATION_FAILED", error: `Cannot submit for review. Missing: ${missing.join(", ")}`, missing }); }
+    }
+
+    let revisionId;
+    if (action === ACTIONS.SUBMIT) {
+      const revision = await client.query(
+        `INSERT INTO content_revisions(position_id, revision, snapshot, created_by) VALUES ($1,$2,$3,$4)
+         ON CONFLICT(position_id, revision) DO UPDATE SET snapshot = EXCLUDED.snapshot RETURNING id`,
+        [row.id, row.revision, snapshotPosition(row), req.session.user.email],
+      );
+      revisionId = revision.rows[0].id;
+      await client.query("UPDATE content_reviews SET status = 'Changes Requested', decided_at = now() WHERE position_id = $1 AND status = 'Open'", [row.id]);
+      await client.query("INSERT INTO content_reviews(position_id, revision_id, stage) VALUES ($1,$2,'Architect')", [row.id, revisionId]);
+    } else if ([ACTIONS.REQUEST_CHANGES, ACTIONS.ARCHITECT_APPROVE, ACTIONS.PEER_APPROVE].includes(action)) {
+      const open = await client.query("SELECT * FROM content_reviews WHERE position_id = $1 AND status = 'Open' FOR UPDATE", [row.id]);
+      if (!open.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ code: "INVALID_WORKFLOW_STATE", error: "No open review exists" }); }
+      const expectedStage = row.status === STATUSES.PEER_REVIEW ? "Peer" : "Architect";
+      if (open.rows[0].stage !== expectedStage) { await client.query("ROLLBACK"); return res.status(409).json({ code: "INVALID_WORKFLOW_STATE", error: "Review stage does not match content state" }); }
+      if (action === ACTIONS.REQUEST_CHANGES && !String(req.body.comment ?? "").trim()) {
+        await client.query("ROLLBACK"); return res.status(400).json({ error: "A change-request comment is required" });
+      }
+      revisionId = open.rows[0].revision_id;
+      const decision = action === ACTIONS.REQUEST_CHANGES ? "Changes Requested" : "Approved";
+      await client.query("UPDATE content_reviews SET status=$1, comment=$2, reviewer_email=$3, decided_at=now() WHERE id=$4", [decision, String(req.body.comment ?? ""), req.session.user.email, open.rows[0].id]);
+      if (action === ACTIONS.ARCHITECT_APPROVE) {
+        await client.query("INSERT INTO content_reviews(position_id, revision_id, stage) VALUES ($1,$2,'Peer')", [row.id, revisionId]);
+      }
+    }
+
+    if (action === ACTIONS.PUBLISH) {
+      if (!row.approved_revision_id) { await client.query("ROLLBACK"); return res.status(409).json({ code: "LIBRARY_PUBLISH_FAILED", error: "No approved revision is recorded" }); }
+      const approved = await client.query("SELECT snapshot FROM content_revisions WHERE id=$1 AND position_id=$2", [row.approved_revision_id, row.id]);
+      if (!approved.rowCount) { await client.query("ROLLBACK"); return res.status(409).json({ code: "LIBRARY_PUBLISH_FAILED", error: "Approved revision is missing" }); }
+      await client.query(
+        `INSERT INTO library_items(position_id,revision_id,snapshot,approved_by,approved_at,published_by)
+         VALUES($1,$2,$3,$4,now(),$5)
+         ON CONFLICT(position_id) DO UPDATE SET published_at=library_items.published_at
+         WHERE library_items.revision_id=EXCLUDED.revision_id`,
+        [row.id, row.approved_revision_id, approved.rows[0].snapshot, req.session.user.email, req.session.user.email],
+      );
+    }
+    const updated = await client.query(
+      `UPDATE positions SET status=$1, builder=$2, approved_revision_id=CASE WHEN $3::text='peer_approve' THEN $4 ELSE approved_revision_id END, updated_at=now()
+       WHERE id=$5 RETURNING *`, [rule.nextStatus, row.builder, action, revisionId ?? null, row.id],
+    );
+    await client.query("COMMIT");
+    console.info("content workflow", { contentId: row.id, revisionId, action, userId: req.session.user.email });
+    res.json(rowToPosition(updated.rows[0]));
+  } catch (err) {
+    await client.query("ROLLBACK");
+    next(err);
+  } finally { client.release(); }
 });
 
 app.delete("/api/positions/:id", requireRole(ADMIN, ARCHITECT), async (req, res, next) => {
@@ -473,8 +604,8 @@ app.get("/api/similarity", async (_req, res, next) => {
 // --- Approved content ---
 app.get("/api/approved", async (_req, res, next) => {
   try {
-    const { rows } = await pool.query("SELECT data FROM approved_content ORDER BY concept");
-    res.json(rows.map((r) => r.data));
+    const { rows } = await pool.query("SELECT snapshot, published_at FROM library_items ORDER BY published_at DESC");
+    res.json(rows.map((r) => ({ ...r.snapshot, updated: r.published_at, domain: r.snapshot.broadTags?.[0] ?? "", topic: r.snapshot.broadTags?.[1] ?? "", types: r.snapshot.broadTags ?? [], positions: 1, coverage: r.snapshot.rating ?? "" })));
   } catch (err) { next(err); }
 });
 
