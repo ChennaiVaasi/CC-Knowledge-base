@@ -4,7 +4,7 @@ import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { Chess } from "chess.js";
-import { ACTIONS, STATUSES, snapshotPosition, submissionMissing, transitionFor } from "./workflow.js";
+import { ACTIONS, STATUSES, canEditPositionFields, snapshotPosition, submissionMissing, transitionFor } from "./workflow.js";
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -304,29 +304,21 @@ app.post("/api/positions", requireRole(ADMIN, ARCHITECT), async (req, res, next)
   }
 });
 
-const BUILDER_FIELDS = new Set(["learningOutcome", "solves", "concept", "broadTags", "expectedRevision"]);
-
 app.patch("/api/positions/:id", async (req, res, next) => {
   try {
     const user = req.session.user;
     const body = req.body ?? {};
+    const existing = await pool.query("SELECT builder, status FROM positions WHERE id = $1", [req.params.id]);
+    if (existing.rows.length === 0) return res.status(404).json({ error: "position not found" });
+    const keys = Object.keys(body);
+    if (!canEditPositionFields(user.role, existing.rows[0].status, keys)) {
+      return res.status(403).json({ code: "PERMISSION_DENIED", error: "You cannot edit these fields at this review stage" });
+    }
     if (user.role === BUILDER) {
-      // Builders may only edit instructional content and move their own
-      // assigned positions into In Progress / Submitted.
-      const keys = Object.keys(body);
-      if (keys.some((key) => !BUILDER_FIELDS.has(key))) {
-        return res.status(403).json({ error: "Builders can only edit instructional fields and progress status" });
-      }
-      const existing = await pool.query("SELECT builder FROM positions WHERE id = $1", [req.params.id]);
-      if (existing.rows.length === 0) return res.status(404).json({ error: "position not found" });
       const firstName = user.name.split(" ")[0];
       if (existing.rows[0].builder !== firstName && existing.rows[0].builder !== user.name) {
         return res.status(403).json({ error: "You can only edit positions assigned to you" });
       }
-    } else if (user.role === REVIEWER) {
-      return res.status(403).json({ code: "PERMISSION_DENIED", error: "Peer reviewers cannot edit submitted content" });
-    } else if (user.role !== ADMIN && user.role !== ARCHITECT) {
-      return res.status(403).json({ error: "Insufficient permissions" });
     }
     const allowed = {
       title: "title", subtitle: "subtitle", fen: "fen", source: "source",
@@ -335,6 +327,9 @@ app.patch("/api/positions/:id", async (req, res, next) => {
     };
     const sets = [];
     const values = [];
+    if (req.body?.title !== undefined && !String(req.body.title).trim()) {
+      return res.status(400).json({ error: "title is required" });
+    }
     for (const [key, col] of Object.entries(allowed)) {
       if (req.body?.[key] !== undefined) {
         if (key === "priority" && !VALID_PRIORITIES.includes(req.body[key])) {
