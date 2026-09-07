@@ -49,6 +49,20 @@ export function submissionMissing(position) {
   return missing;
 }
 
+const BUILDER_EDITABLE_FIELDS = new Set(["title", "learningOutcome", "solves", "concept", "broadTags", "expectedRevision"]);
+const PEER_REVIEWER_EDITABLE_FIELDS = new Set(["title", "expectedRevision"]);
+
+export function canEditPositionFields(role, status, fields) {
+  if (role === "Builder") {
+    const editableStatus = [STATUSES.ASSIGNED, STATUSES.IN_PROGRESS, STATUSES.CHANGES_REQUESTED].includes(status);
+    return editableStatus && fields.every((field) => BUILDER_EDITABLE_FIELDS.has(field));
+  }
+  if (role === "Peer Reviewer") {
+    return status === STATUSES.PEER_REVIEW && fields.every((field) => PEER_REVIEWER_EDITABLE_FIELDS.has(field));
+  }
+  return role === "Admin" || role === "Knowledge Architect";
+}
+
 export function snapshotPosition(position) {
   return {
     id: position.id,

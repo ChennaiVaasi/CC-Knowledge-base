@@ -87,6 +87,31 @@ textarea {
   resize: vertical;
 }
 
+.title-tag-field {
+  display: grid;
+  justify-items: start;
+  gap: 0.45rem;
+}
+
+.title-tag-field > input {
+  width: min(100%, 34rem);
+  border-color: rgba(43, 103, 246, 0.3);
+  border-radius: 999px;
+  padding: 0.58rem 0.9rem;
+  background: rgba(43, 103, 246, 0.08);
+  color: var(--primary-deep);
+  font-weight: 700;
+}
+
+.title-tag-field > input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(43, 103, 246, 0.12);
+}
+
+.review-title-field {
+  margin-top: 0.35rem;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;

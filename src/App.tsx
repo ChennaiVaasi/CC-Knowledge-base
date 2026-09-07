@@ -280,6 +280,7 @@ function App() {
 
   // Builder Workspace controlled fields
   const [builderLearningOutcome, setBuilderLearningOutcome] = useState("");
+  const [positionTitle, setPositionTitle] = useState("");
   const [builderSolves, setBuilderSolves] = useState("");
   const [builderConcept, setBuilderConcept] = useState("");
   const [builderDomain, setBuilderDomain] = useState("");
@@ -376,6 +377,7 @@ function App() {
   useEffect(() => {
     if (!selectedRow) return;
     setBuilderLearningOutcome(selectedRow.learningOutcome ?? "");
+    setPositionTitle(selectedRow.title ?? "");
     setBuilderSolves(selectedRow.solves ?? "");
     setBuilderConcept(selectedRow.concept ?? "");
     setBuilderRating(selectedRow.rating ?? "");
@@ -1083,6 +1085,7 @@ function App() {
               type="button"
               onClick={async () => {
                 await updatePosition(selectedRow.id, {
+                  title: positionTitle.trim(),
                   learningOutcome: builderLearningOutcome,
                   solves: builderSolves,
                   concept: builderConcept,
@@ -1143,6 +1146,19 @@ function App() {
               </div>
             </div>
             <div className="form-grid">
+              <label className="span-2 title-tag-field">
+                Title
+                <input
+                  value={positionTitle}
+                  onChange={(event) => setPositionTitle(event.target.value)}
+                  onBlur={() => {
+                    const title = positionTitle.trim();
+                    if (title && title !== selectedRow.title) updatePosition(selectedRow.id, { title });
+                  }}
+                  placeholder="Add a concise title"
+                  required
+                />
+              </label>
               <SelectOrAddField
                 label="Domain"
                 options={taxonomy.map((node) => node.domain)}
@@ -1302,6 +1318,9 @@ function App() {
 
   function renderReviewPage() {
     if (!selectedRow) return <EmptyState message="There are no submissions to review." />;
+    const canEditReviewTitle = currentUser?.role === "Admin"
+      || currentUser?.role === "Knowledge Architect"
+      || (currentUser?.role === "Peer Reviewer" && selectedRow.status === "Peer Review");
     return (
       <section className="page-stack">
         <div className="page-title">
@@ -1317,7 +1336,20 @@ function App() {
             <div className="panel-header">
               <div>
                 <span className="section-kicker">Submission {selectedRow.id}</span>
-                <h3>{selectedRow.title}</h3>
+                <label className="title-tag-field review-title-field">
+                  Title
+                  <input
+                    value={positionTitle}
+                    onChange={(event) => setPositionTitle(event.target.value)}
+                    onBlur={() => {
+                      const title = positionTitle.trim();
+                      if (title && title !== selectedRow.title) updatePosition(selectedRow.id, { title });
+                    }}
+                    aria-label="Submission title"
+                    disabled={!canEditReviewTitle}
+                    required
+                  />
+                </label>
               </div>
             </div>
             <div className="review-card">

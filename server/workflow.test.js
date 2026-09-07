@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { ACTIONS, STATUSES, snapshotPosition, submissionMissing, transitionFor } from "./workflow.js";
+import { ACTIONS, STATUSES, canEditPositionFields, snapshotPosition, submissionMissing, transitionFor } from "./workflow.js";
 
 test("workflow rejects bypasses and stale repeated decisions", () => {
   assert.equal(transitionFor(STATUSES.ASSIGNED, ACTIONS.PEER_APPROVE, "Peer Reviewer").code, "INVALID_WORKFLOW_STATE");
@@ -13,6 +13,15 @@ test("submission validation reports every missing instructional field", () => {
   assert.deepEqual(submissionMissing({ fen: "", concept: "", learning_outcome: "", broad_tags: [] }), [
     "Position source (FEN or PGN)", "Concept", "Learning Outcome", "Domain / tags",
   ]);
+});
+
+test("builders can set titles and peer reviewers can only revise titles during peer review", () => {
+  assert.equal(canEditPositionFields("Builder", STATUSES.IN_PROGRESS, ["title", "concept", "expectedRevision"]), true);
+  assert.equal(canEditPositionFields("Builder", STATUSES.IN_PROGRESS, ["rating"]), false);
+  assert.equal(canEditPositionFields("Builder", STATUSES.SUBMITTED, ["title"]), false);
+  assert.equal(canEditPositionFields("Peer Reviewer", STATUSES.PEER_REVIEW, ["title", "expectedRevision"]), true);
+  assert.equal(canEditPositionFields("Peer Reviewer", STATUSES.SUBMITTED, ["title"]), false);
+  assert.equal(canEditPositionFields("Peer Reviewer", STATUSES.PEER_REVIEW, ["concept"]), false);
 });
 
 test("approved snapshots preserve chess source and taxonomy exactly", () => {
