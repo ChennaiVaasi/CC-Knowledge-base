@@ -71,6 +71,12 @@ button:hover {
   transform: translateY(-1px);
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+}
+
 input,
 select,
 textarea {
@@ -85,6 +91,54 @@ textarea {
 
 textarea {
   resize: vertical;
+}
+
+.teaching-detail-field {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.field-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.field-heading label {
+  color: var(--muted);
+}
+
+.ai-button {
+  padding: 0.55rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  box-shadow: 0 6px 16px rgba(43, 103, 246, 0.16);
+}
+
+.concept-preview {
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(43, 103, 246, 0.2);
+  border-radius: 12px;
+  background: rgba(43, 103, 246, 0.055);
+  color: var(--text);
+  white-space: pre-wrap;
+}
+
+.concept-preview::before {
+  content: "Formatted preview";
+  display: block;
+  margin-bottom: 0.3rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.ai-error {
+  margin: 0;
+  color: var(--danger);
 }
 
 .title-tag-field {

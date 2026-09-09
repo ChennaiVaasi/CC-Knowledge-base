@@ -16,7 +16,7 @@ test("submission validation reports every missing instructional field", () => {
 });
 
 test("builders can set titles and peer reviewers can only revise titles during peer review", () => {
-  assert.equal(canEditPositionFields("Builder", STATUSES.IN_PROGRESS, ["title", "concept", "expectedRevision"]), true);
+  assert.equal(canEditPositionFields("Builder", STATUSES.IN_PROGRESS, ["title", "concept", "teachingFocus", "expectedRevision"]), true);
   assert.equal(canEditPositionFields("Builder", STATUSES.IN_PROGRESS, ["rating"]), false);
   assert.equal(canEditPositionFields("Builder", STATUSES.SUBMITTED, ["title"]), false);
   assert.equal(canEditPositionFields("Peer Reviewer", STATUSES.PEER_REVIEW, ["title", "expectedRevision"]), true);
@@ -31,6 +31,7 @@ test("approved snapshots preserve chess source and taxonomy exactly", () => {
   assert.equal(snapshot.fen, row.fen);
   assert.deepEqual(snapshot.broadTags, row.broad_tags);
   assert.equal(snapshot.revision, 7);
+  assert.equal(snapshot.teachingFocus, "");
 });
 
 test("happy path and change-request path follow the complete state machine", () => {

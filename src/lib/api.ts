@@ -21,6 +21,7 @@ export type PoolRow = {
   priority: "Low" | "Normal" | "High";
   learningOutcome: string;
   solves: string;
+  teachingFocus: string;
   similarity: number;
   concept: string;
   rawPgn: string;
@@ -130,4 +131,9 @@ export const api = {
     ),
   getSimilarity: () => request<SimilarityCard[]>("/api/similarity"),
   getApproved: () => request<ApprovedCard[]>("/api/approved"),
+  elaborateTeachingDetail: (data: {
+    field: "learningOutcome" | "solves";
+    text: string;
+    context: Record<string, string>;
+  }) => request<{ text: string }>("/api/ai/elaborate", { method: "POST", body: JSON.stringify(data) }),
 };
