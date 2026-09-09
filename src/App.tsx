@@ -239,6 +239,17 @@ function EmptyState({ message }: { message: string }) {
   return <div className="empty-state">{message}</div>;
 }
 
+function BoldConceptPreview({ text }: { text: string }) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <div className="concept-preview" aria-label="Formatted teaching detail preview">
+      {parts.map((part, index) => part.startsWith("**") && part.endsWith("**")
+        ? <strong key={`${part}-${index}`}>{part.slice(2, -2)}</strong>
+        : <span key={`${part}-${index}`}>{part}</span>)}
+    </div>
+  );
+}
+
 function App() {
   const [currentUser, setCurrentUser] = useState<UserRow | null>(null);
   const [authChecked, setAuthChecked] = useState(false);
@@ -282,10 +293,13 @@ function App() {
   const [builderLearningOutcome, setBuilderLearningOutcome] = useState("");
   const [positionTitle, setPositionTitle] = useState("");
   const [builderSolves, setBuilderSolves] = useState("");
+  const [builderTeachingFocus, setBuilderTeachingFocus] = useState("");
   const [builderConcept, setBuilderConcept] = useState("");
   const [builderDomain, setBuilderDomain] = useState("");
   const [builderTopic, setBuilderTopic] = useState("");
   const [builderRating, setBuilderRating] = useState("");
+  const [elaboratingField, setElaboratingField] = useState<"learningOutcome" | "solves" | null>(null);
+  const [elaborationError, setElaborationError] = useState<string | null>(null);
 
   // Taxonomy form state
   const [showTaxonomyForm, setShowTaxonomyForm] = useState(false);
@@ -379,6 +393,7 @@ function App() {
     setBuilderLearningOutcome(selectedRow.learningOutcome ?? "");
     setPositionTitle(selectedRow.title ?? "");
     setBuilderSolves(selectedRow.solves ?? "");
+    setBuilderTeachingFocus(selectedRow.teachingFocus ?? "");
     setBuilderConcept(selectedRow.concept ?? "");
     setBuilderRating(selectedRow.rating ?? "");
     // Infer domain and topic from broadTags or taxonomy lookup
@@ -407,6 +422,38 @@ function App() {
       setActionError(null);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "Update failed");
+    }
+  }
+
+  async function elaborateTeachingDetail(field: "learningOutcome" | "solves") {
+    if (!selectedRow) return;
+    const text = field === "learningOutcome" ? builderLearningOutcome : builderSolves;
+    if (!text.trim()) {
+      setElaborationError("Add your key ideas before asking Gemini to elaborate.");
+      return;
+    }
+    setElaboratingField(field);
+    setElaborationError(null);
+    try {
+      const result = await api.elaborateTeachingDetail({
+        field,
+        text,
+        context: {
+          domain: builderDomain,
+          topic: builderTopic,
+          concept: builderConcept,
+          rating: builderRating,
+          teachingFocus: builderTeachingFocus,
+          fen: selectedRow.fen,
+        },
+      });
+      if (field === "learningOutcome") setBuilderLearningOutcome(result.text);
+      else setBuilderSolves(result.text);
+      await updatePosition(selectedRow.id, { [field]: result.text });
+    } catch (err) {
+      setElaborationError(err instanceof Error ? err.message : "Gemini could not elaborate this detail");
+    } finally {
+      setElaboratingField(null);
     }
   }
 
@@ -1210,23 +1257,58 @@ function App() {
                 </div>
               </label>
               <label className="span-2">
-                Learning Outcome
+                Teaching Focus
                 <textarea
+                  rows={3}
+                  value={builderTeachingFocus}
+                  onChange={(event) => setBuilderTeachingFocus(event.target.value)}
+                  onBlur={() => updatePosition(selectedRow.id, { teachingFocus: builderTeachingFocus })}
+                  placeholder="Describe what the coach should emphasize while teaching this position."
+                />
+              </label>
+              <div className="span-2 teaching-detail-field">
+                <div className="field-heading">
+                  <label htmlFor="learning-outcome">Learning Outcome</label>
+                  <button
+                    type="button"
+                    className="ai-button"
+                    onClick={() => elaborateTeachingDetail("learningOutcome")}
+                    disabled={elaboratingField !== null || !builderLearningOutcome.trim()}
+                  >
+                    {elaboratingField === "learningOutcome" ? "Elaborating…" : "✦ Elaborate with AI"}
+                  </button>
+                </div>
+                <textarea
+                  id="learning-outcome"
                   rows={4}
                   value={builderLearningOutcome}
                   onChange={(event) => setBuilderLearningOutcome(event.target.value)}
                   onBlur={() => updatePosition(selectedRow.id, { learningOutcome: builderLearningOutcome })}
                 />
-              </label>
-              <label className="span-2">
-                What This Solves
+                {builderLearningOutcome.includes("**") ? <BoldConceptPreview text={builderLearningOutcome} /> : null}
+              </div>
+              <div className="span-2 teaching-detail-field">
+                <div className="field-heading">
+                  <label htmlFor="what-this-solves">What This Solves</label>
+                  <button
+                    type="button"
+                    className="ai-button"
+                    onClick={() => elaborateTeachingDetail("solves")}
+                    disabled={elaboratingField !== null || !builderSolves.trim()}
+                  >
+                    {elaboratingField === "solves" ? "Elaborating…" : "✦ Elaborate with AI"}
+                  </button>
+                </div>
                 <textarea
+                  id="what-this-solves"
                   rows={4}
                   value={builderSolves}
                   onChange={(event) => setBuilderSolves(event.target.value)}
                   onBlur={() => updatePosition(selectedRow.id, { solves: builderSolves })}
                 />
-              </label>
+                {builderSolves.includes("**") ? <BoldConceptPreview text={builderSolves} /> : null}
+              </div>
+              {elaborationError ? <p className="span-2 ai-error" role="alert">{elaborationError}</p> : null}
             </div>
           </section>
         </div>

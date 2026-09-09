@@ -49,7 +49,7 @@ export function submissionMissing(position) {
   return missing;
 }
 
-const BUILDER_EDITABLE_FIELDS = new Set(["title", "learningOutcome", "solves", "concept", "broadTags", "expectedRevision"]);
+const BUILDER_EDITABLE_FIELDS = new Set(["title", "learningOutcome", "solves", "teachingFocus", "concept", "broadTags", "expectedRevision"]);
 const PEER_REVIEWER_EDITABLE_FIELDS = new Set(["title", "expectedRevision"]);
 
 export function canEditPositionFields(role, status, fields) {
@@ -75,6 +75,7 @@ export function snapshotPosition(position) {
     rating: position.rating,
     learningOutcome: position.learning_outcome ?? position.learningOutcome ?? "",
     solves: position.solves,
+    teachingFocus: position.teaching_focus ?? position.teachingFocus ?? "",
     concept: position.concept,
     builder: position.builder,
     revision: Number(position.revision),

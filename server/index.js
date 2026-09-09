@@ -5,6 +5,7 @@ import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
 import { Chess } from "chess.js";
 import { ACTIONS, STATUSES, canEditPositionFields, snapshotPosition, submissionMissing, transitionFor } from "./workflow.js";
+import { elaborateWithGemini } from "./gemini.js";
 
 const { Pool } = pg;
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -81,6 +82,7 @@ ALTER TABLE positions ADD COLUMN IF NOT EXISTS raw_pgn TEXT NOT NULL DEFAULT '';
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS approved_revision_id BIGINT;
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS teaching_focus TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS content_revisions (
   id BIGSERIAL PRIMARY KEY,
   position_id TEXT NOT NULL REFERENCES positions(id) ON DELETE RESTRICT,
@@ -160,6 +162,7 @@ function rowToPosition(row) {
     solves: row.solves,
     similarity: row.similarity,
     concept: row.concept,
+    teachingFocus: row.teaching_focus,
     rawPgn: row.raw_pgn,
     revision: row.revision,
     updatedAt: row.updated_at,
@@ -286,15 +289,15 @@ app.post("/api/positions", requireRole(ADMIN, ARCHITECT), async (req, res, next)
     const status = VALID_STATUSES.includes(b.status) ? b.status : "New";
     const priority = VALID_PRIORITIES.includes(b.priority) ? b.priority : "Normal";
     const { rows } = await pool.query(
-      `INSERT INTO positions (id, title, subtitle, fen, broad_tags, source, rating, status, builder, priority, learning_outcome, solves, similarity, concept, raw_pgn)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+      `INSERT INTO positions (id, title, subtitle, fen, broad_tags, source, rating, status, builder, priority, learning_outcome, solves, similarity, concept, raw_pgn, teaching_focus)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [
         id, b.title, b.subtitle ?? "", fen,
         JSON.stringify(Array.isArray(b.broadTags) ? b.broadTags : []),
         b.source ?? "Manual import", b.rating ?? "600 - 800", status,
         b.builder ?? "Unassigned", priority,
         b.learningOutcome ?? "", b.solves ?? "",
-        Number.isFinite(b.similarity) ? b.similarity : 0, b.concept ?? "", rawPgn,
+        Number.isFinite(b.similarity) ? b.similarity : 0, b.concept ?? "", rawPgn, b.teachingFocus ?? "",
       ],
     );
     res.status(201).json(rowToPosition(rows[0]));
@@ -323,7 +326,7 @@ app.patch("/api/positions/:id", async (req, res, next) => {
     const allowed = {
       title: "title", subtitle: "subtitle", fen: "fen", source: "source",
       rating: "rating", builder: "builder", priority: "priority", rawPgn: "raw_pgn",
-      learningOutcome: "learning_outcome", solves: "solves", concept: "concept",
+      learningOutcome: "learning_outcome", solves: "solves", concept: "concept", teachingFocus: "teaching_focus",
     };
     const sets = [];
     const values = [];
@@ -452,6 +455,29 @@ app.delete("/api/positions/:id", requireRole(ADMIN, ARCHITECT), async (req, res,
     if (rowCount === 0) return res.status(404).json({ error: "position not found" });
     res.status(204).end();
   } catch (err) { next(err); }
+});
+
+// Gemini elaborates educator-authored details but never writes them directly. The
+// client displays the result for review and saves it through the normal revision path.
+app.post("/api/ai/elaborate", async (req, res, next) => {
+  try {
+    const { field, text, context } = req.body ?? {};
+    if (!["learningOutcome", "solves"].includes(field)) {
+      return res.status(400).json({ error: "field must be learningOutcome or solves" });
+    }
+    if (!String(text ?? "").trim()) return res.status(400).json({ error: "Add teaching details before elaborating" });
+    if (String(text).length > 5000) return res.status(400).json({ error: "Teaching details must be 5000 characters or fewer" });
+    const elaboratedText = await elaborateWithGemini(
+      { field, text: String(text), context: context ?? {} },
+      { apiKey: process.env.GEMINI_API_KEY, model: process.env.GEMINI_MODEL || "gemini-2.5-flash" },
+    );
+    res.json({ text: elaboratedText });
+  } catch (err) {
+    if (err.message === "GEMINI_API_KEY is not configured") {
+      return res.status(503).json({ error: "Gemini AI is not configured" });
+    }
+    next(err);
+  }
 });
 
 // --- Users ---
